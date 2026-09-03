@@ -1,4 +1,3 @@
-import { COMPANIES } from "./companies";
 import { miles } from "./geo";
 import type { Answers, Company, RoleKey, ScoredCompany, ScoreParts, UserProfile } from "./types";
 
@@ -47,7 +46,7 @@ const BASE: Record<"commute" | "fit" | "size" | "growth" | "reach" | "hs", numbe
   hs: 5,
 };
 
-export function score(answers: Answers, user: UserProfile): ScoredCompany[] {
+export function score(answers: Answers, user: UserProfile, companies: Company[]): ScoredCompany[] {
   const a = answers;
   const w = { ...BASE };
   (a.pri || []).forEach((p) => {
@@ -66,7 +65,7 @@ export function score(answers: Answers, user: UserProfile): ScoredCompany[] {
   const userLat = user.lat!;
   const userLng = user.lng!;
 
-  const out: ScoredCompany[] = COMPANIES.map((co) => {
+  const out: ScoredCompany[] = companies.map((co) => {
     const remote = co.lat === null;
     let d: number | null = null;
     let cs: number;
