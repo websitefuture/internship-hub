@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import Dial, { type DialPoint } from "@/components/Dial";
-import { bearing, miles } from "@/lib/geo";
+import { bearing } from "@/lib/geo";
 import { QUESTIONS } from "@/lib/questions";
 import { load, save } from "@/lib/storage";
-import type { Answers, Company, GeoResult, Question, ScoredListing, UserProfile } from "@/lib/types";
+import type { Answers, GeoResult, Question, ScoredListing, UserProfile } from "@/lib/types";
 
 type View = "landing" | "auth" | "q" | "res";
 
@@ -73,9 +73,7 @@ function isAnswerEmpty(q: Question, answers: Answers): boolean {
   return !v;
 }
 
-const HERO_ORIGIN = { lat: 37.2872, lng: -121.95 }; // Campbell — matches the prototype's hero demo
-
-export default function HomeClient({ companies }: { companies: Company[] }) {
+export default function HomeClient() {
   const { data: session, status } = useSession();
   const [view, setView] = useState<View>("landing");
   const [user, setUser] = useState<UserProfile | null>(null);
@@ -91,7 +89,6 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
   const [geoBusy, setGeoBusy] = useState(false);
   const [computing, setComputing] = useState(false);
   const [progressMsg, setProgressMsg] = useState("");
-  const [dialSize, setDialSize] = useState(360);
   const [resDialSize, setResDialSize] = useState(360);
   const [citySearch, setCitySearch] = useState("");
   const [cityResults, setCityResults] = useState<GeoResult[]>([]);
@@ -99,10 +96,7 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
   const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const resize = () => {
-      setDialSize(Math.max(200, Math.min(360, window.innerWidth - 70)));
-      setResDialSize(Math.max(200, Math.min(360, window.innerWidth - 70)));
-    };
+    const resize = () => setResDialSize(Math.max(200, Math.min(360, window.innerWidth - 70)));
     resize();
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
@@ -130,19 +124,6 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
       });
     }
   }, [status, session]);
-
-  const heroDial: DialPoint[] = useMemo(() => {
-    const demo: DialPoint[] = companies
-      .filter((c) => c.lat !== null)
-      .map((c) => ({
-        label: c.n,
-        d: miles(HERO_ORIGIN.lat, HERO_ORIGIN.lng, c.lat!, c.lng!),
-        b: bearing(HERO_ORIGIN.lat, HERO_ORIGIN.lng, c.lat!, c.lng!),
-        lim: 15,
-      }));
-    demo.slice(0, 20).forEach((c) => (c.top = true));
-    return demo;
-  }, [companies]);
 
   async function handleSignOut() {
     if (status === "authenticated") await signOut({ redirect: false });
@@ -360,9 +341,6 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
               <button className="btn" onClick={() => setView(user ? "q" : "auth")}>
                 Get started
               </button>
-            </div>
-            <div className="dial-wrap">
-              <Dial list={heroDial} size={dialSize} />
             </div>
           </section>
 
