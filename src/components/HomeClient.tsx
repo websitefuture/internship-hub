@@ -163,8 +163,8 @@ function ContactModal({ listing, onClose }: { listing: ScoredListing; onClose: (
           {listing.coldOutreach ? (
             <>
               <p className="note" style={{ marginBottom: 8 }}>
-                {listing.company} has no posted opening — this is a business we think fits what you're looking for,
-                not a confirmed job. Reach out directly using whichever of these they have:
+                {listing.company} has no posted opening — this is a business we think fits what you&apos;re looking
+                for, not a confirmed job. Reach out directly using whichever of these they have:
               </p>
               <p className="desc">
                 {listing.contactEmail && (
@@ -327,6 +327,31 @@ export default function HomeClient() {
   const [cityLoading, setCityLoading] = useState(false);
   const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Real browser history: every navigation (question step, view change) is a real entry, so
+  // the back/forward buttons and the browser's back gesture work like on any other site,
+  // instead of the whole app being invisible to history because it's one client-rendered page.
+  const skipPushRef = useRef(false);
+  function go(nextView: View, nextQIndex = 0) {
+    setView(nextView);
+    if (nextView === "q") setQIndex(nextQIndex);
+    if (!skipPushRef.current) {
+      window.history.pushState({ view: nextView, qIndex: nextQIndex }, "");
+    }
+    skipPushRef.current = false;
+  }
+
+  useEffect(() => {
+    window.history.replaceState({ view: "landing", qIndex: 0 }, "");
+    const onPop = (e: PopStateEvent) => {
+      const s = (e.state as { view: View; qIndex: number } | null) || { view: "landing", qIndex: 0 };
+      skipPushRef.current = true;
+      setView(s.view);
+      setQIndex(s.qIndex);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
   useEffect(() => {
     const resize = () => setResDialSize(Math.max(200, Math.min(360, window.innerWidth - 70)));
     resize();
@@ -360,7 +385,7 @@ export default function HomeClient() {
               setHsCity(data.answers.loc.label);
             }
             setTab(0);
-            setView("res");
+            go("res");
           }
         })
         .catch(() => syncUser());
@@ -379,7 +404,7 @@ export default function HomeClient() {
             setHsCity(a.loc.label);
           }
           setTab(0);
-          setView("res");
+          go("res");
         }
       });
     }
@@ -392,7 +417,7 @@ export default function HomeClient() {
     setResults(null);
     save("profile", null);
     save("answers", null);
-    setView("landing");
+    go("landing");
   }
 
   function createProfile() {
@@ -401,8 +426,7 @@ export default function HomeClient() {
     const u: UserProfile = { name: n, email: email.trim() };
     setUser(u);
     save("profile", u);
-    setQIndex(0);
-    setView("q");
+    go("q", 0);
   }
 
   const currentQ = QUESTIONS[qIndex];
@@ -481,7 +505,7 @@ export default function HomeClient() {
     }
     setQHint("");
     if (qIndex < QUESTIONS.length - 1) {
-      setQIndex((i) => i + 1);
+      go("q", qIndex + 1);
       return;
     }
 
@@ -524,7 +548,7 @@ export default function HomeClient() {
       setHsRadiusMiles(data.hsRadiusMiles || 0);
       setHsCity(data.hsCity || "");
       setTab(0);
-      setView("res");
+      go("res");
       if (status === "authenticated") {
         fetch("/api/user-data", {
           method: "POST",
@@ -548,7 +572,7 @@ export default function HomeClient() {
   function goBack() {
     if (qIndex > 0) {
       setQHint("");
-      setQIndex((i) => i - 1);
+      go("q", qIndex - 1);
     }
   }
 
@@ -585,7 +609,7 @@ export default function HomeClient() {
     <>
       <header className="bar">
         <div className="wrap">
-          <div className="brand">
+          <button className="brand" onClick={() => go("landing")} aria-label="Internship Hub home">
             <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
               <circle cx="11" cy="11" r="9.5" fill="none" stroke="#DCE3DF" strokeWidth="1" />
               <circle cx="11" cy="11" r="5.5" fill="none" stroke="#DCE3DF" strokeWidth="1" />
@@ -594,7 +618,7 @@ export default function HomeClient() {
               <circle cx="6.2" cy="14.4" r="2" fill="#0E7C66" />
             </svg>
             Internship Hub
-          </div>
+          </button>
           {user && (
             <div className="who">
               <span className="avatar" style={avatarStyle(user.name)} aria-hidden="true">
@@ -613,52 +637,127 @@ export default function HomeClient() {
         <main className="wrap">
           <section className="hero">
             <div className="hero-text">
-              <div className="kicker">For students looking for their first internship</div>
+              <div className="kicker">
+                <span className="dotpulse" /> For students looking for their first internship
+              </div>
               <h1>
                 Internships you can
                 <br />
                 actually <span className="accent-text">get to.</span>
               </h1>
-              <button className="btn" onClick={() => setView(user ? "q" : "auth")}>
+              <p className="hero-sub">
+                Nine quick questions. We search real, live listings worldwide — or, for high schoolers, real nearby
+                businesses worth a cold pitch — and rank everything by how you&apos;d actually get there.
+              </p>
+              <button className="btn" onClick={() => go(user ? "q" : "auth")}>
                 Get started
               </button>
+              <div className="hero-note">Free. Two minutes. No internship experience required.</div>
+            </div>
+
+            <div className="role-strip">
+              {["Marketing", "Engineering", "Design", "Data", "Trades", "Healthcare", "Hospitality", "Retail"].map((r) => (
+                <span key={r} className="role-chip">
+                  {r}
+                </span>
+              ))}
+            </div>
+
+            <div className="hero-mockup-wrap">
+              <div className="mockup-card" aria-hidden="true">
+                <div className="mockup-titlebar">
+                  <span className="mockup-dot" style={{ background: "#e6b4ab" }} />
+                  <span className="mockup-dot" style={{ background: "#eed7a3" }} />
+                  <span className="mockup-dot" style={{ background: "#b7dcc7" }} />
+                  <span className="mockup-titletext">Your shortlist</span>
+                </div>
+                <div className="mockup-body">
+                  <div className="mockup-stats">
+                    <div className="mockup-stat">
+                      <b>34</b>
+                      <span>Total matches</span>
+                    </div>
+                    <div className="mockup-stat">
+                      <b>21</b>
+                      <span>Within range</span>
+                    </div>
+                    <div className="mockup-stat">
+                      <b>6</b>
+                      <span>A stretch</span>
+                    </div>
+                    <div className="mockup-stat">
+                      <b>92</b>
+                      <span>Best score</span>
+                    </div>
+                  </div>
+                  {[
+                    { n: "Nova Robotics", role: "Engineering intern", d: "2 mi", s: 92 },
+                    { n: "Fernview Studio", role: "Marketing intern", d: "4 mi", s: 89 },
+                    { n: "BrightPath Clinic", role: "Healthcare intern", d: "1 mi", s: 85 },
+                  ].map((r) => (
+                    <div className="mockup-row" key={r.n}>
+                      <span className="mockup-avatar" style={avatarStyle(r.n)}>
+                        {initial(r.n)}
+                      </span>
+                      <span className="mockup-row-text">
+                        <b>{r.role}</b>
+                        <span>
+                          {r.n} · {r.d}
+                        </span>
+                      </span>
+                      <span className="mockup-score">{r.s}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="float-badge a">📍 Ranked by real distance</div>
+              <div className="float-badge b">✉️ Ready-to-send outreach email</div>
             </div>
           </section>
 
-          <div className="fact-list">
-            <div>
-              <div className="ficon" style={{ background: "#FDEEDC" }}>
-                <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                  <path d="M4 6h12M4 10h12M4 14h8" stroke="#B8551A" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </div>
-              <h3>Nine questions</h3>
-              <p>Where you are, how far you&apos;ll go, how you get there, and what you want to do. Two minutes.</p>
+          <div className="steps">
+            <div className="steps-head">
+              <h2>How it works</h2>
+              <p>No login required to try it, no recruiter spam after.</p>
             </div>
-            <div>
-              <div className="ficon" style={{ background: "#E4F3EE" }}>
-                <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                  <path
-                    d="M10 18s6-5.2 6-9.6A6 6 0 0 0 4 8.4C4 12.8 10 18 10 18Z"
-                    stroke="#0E7C66"
-                    strokeWidth="2"
-                    strokeLinejoin="round"
-                  />
-                  <circle cx="10" cy="8.4" r="2" stroke="#0E7C66" strokeWidth="2" />
-                </svg>
+            <div className="step-grid">
+              <div className="step-card">
+                <div className="step-num">STEP 01</div>
+                <div className="ficon" style={{ background: "#FDEEDC" }}>
+                  <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path d="M4 6h12M4 10h12M4 14h8" stroke="#B8551A" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                </div>
+                <h3>Answer nine quick questions</h3>
+                <p>Where you are, how far you&apos;ll go, how you get there, and what you want to do. Two minutes.</p>
               </div>
-              <h3>Distance first</h3>
-              <p>Your browser can share your location, or search any city in the world. Sign in to save it, or skip the account entirely.</p>
-            </div>
-            <div>
-              <div className="ficon" style={{ background: "#EAF0FB" }}>
-                <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                  <circle cx="10" cy="10" r="7.5" stroke="#2E4E9C" strokeWidth="2" />
-                  <path d="M2.5 10h15M10 2.5c2.5 2 2.5 13 0 15M10 2.5c-2.5 2-2.5 13 0 15" stroke="#2E4E9C" strokeWidth="1.4" />
-                </svg>
+              <div className="step-card">
+                <div className="step-num">STEP 02</div>
+                <div className="ficon" style={{ background: "#E4F3EE" }}>
+                  <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <circle cx="10" cy="10" r="7.5" stroke="#0E7C66" strokeWidth="2" />
+                    <path d="M2.5 10h15M10 2.5c2.5 2 2.5 13 0 15M10 2.5c-2.5 2-2.5 13 0 15" stroke="#0E7C66" strokeWidth="1.4" />
+                  </svg>
+                </div>
+                <h3>We search live, worldwide</h3>
+                <p>Real internship listings ranked by distance and fit — or, for high schoolers, real nearby businesses worth pitching.</p>
               </div>
-              <h3>Live, worldwide</h3>
-              <p>The moment you finish, we search real internship listings near you and rank them by distance and fit.</p>
+              <div className="step-card">
+                <div className="step-num">STEP 03</div>
+                <div className="ficon" style={{ background: "#EAF0FB" }}>
+                  <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                    <path
+                      d="M10 18s6-5.2 6-9.6A6 6 0 0 0 4 8.4C4 12.8 10 18 10 18Z"
+                      stroke="#2E4E9C"
+                      strokeWidth="2"
+                      strokeLinejoin="round"
+                    />
+                    <circle cx="10" cy="8.4" r="2" stroke="#2E4E9C" strokeWidth="2" />
+                  </svg>
+                </div>
+                <h3>Get a ranked shortlist</h3>
+                <p>Apply directly, or use a ready-to-personalize outreach email for businesses with no posted opening.</p>
+              </div>
             </div>
           </div>
         </main>
@@ -667,41 +766,66 @@ export default function HomeClient() {
       {view === "auth" && (
         <main className="wrap">
           <div className="auth">
-            <div className="panel">
-              <h2 style={{ marginBottom: 6 }}>Create your profile</h2>
-              <p className="note" style={{ marginBottom: 20 }}>
-                So your answers and shortlist are here when you come back.
-              </p>
+            <div className="auth-split">
+              <div className="panel">
+                <h2 style={{ marginBottom: 6 }}>Create your profile</h2>
+                <p className="note" style={{ marginBottom: 20 }}>
+                  So your answers and shortlist are here when you come back.
+                </p>
 
-              <button className="gbtn" onClick={() => signIn("google")}>
-                <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">
-                  <path fill="#4285F4" d="M45 24c0-1.6-.1-2.7-.4-4H24v8h12c-.2 2-1.5 5-4.4 7l6.7 5.2C42.2 36.3 45 30.7 45 24z" />
-                  <path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.4C29.7 36.6 27.1 37.4 24 37.4c-5.7 0-10.6-3.8-12.3-9.1l-7.1 5.5C8.1 41.3 15.4 46 24 46z" />
-                  <path fill="#FBBC05" d="M11.7 28.3c-.5-1.4-.7-2.8-.7-4.3s.3-2.9.7-4.3l-7.1-5.5C3 17.1 2 20.4 2 24s1 6.9 2.6 9.8l7.1-5.5z" />
-                  <path fill="#EA4335" d="M24 10.6c3.2 0 6.1 1.1 8.4 3.3l6.3-6.3C34.9 4 29.9 2 24 2 15.4 2 8.1 6.7 4.6 14.2l7.1 5.5C13.4 14.4 18.3 10.6 24 10.6z" />
-                </svg>
-                Continue with Google
-              </button>
-              <p className="note" style={{ marginTop: 10 }}>
-                Saves your answers and shortlist to your account, so they&apos;re here next time you sign in.
-              </p>
+                <button className="gbtn" onClick={() => signIn("google")}>
+                  <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">
+                    <path fill="#4285F4" d="M45 24c0-1.6-.1-2.7-.4-4H24v8h12c-.2 2-1.5 5-4.4 7l6.7 5.2C42.2 36.3 45 30.7 45 24z" />
+                    <path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.4C29.7 36.6 27.1 37.4 24 37.4c-5.7 0-10.6-3.8-12.3-9.1l-7.1 5.5C8.1 41.3 15.4 46 24 46z" />
+                    <path fill="#FBBC05" d="M11.7 28.3c-.5-1.4-.7-2.8-.7-4.3s.3-2.9.7-4.3l-7.1-5.5C3 17.1 2 20.4 2 24s1 6.9 2.6 9.8l7.1-5.5z" />
+                    <path fill="#EA4335" d="M24 10.6c3.2 0 6.1 1.1 8.4 3.3l6.3-6.3C34.9 4 29.9 2 24 2 15.4 2 8.1 6.7 4.6 14.2l7.1 5.5C13.4 14.4 18.3 10.6 24 10.6z" />
+                  </svg>
+                  Continue with Google
+                </button>
+                <p className="note" style={{ marginTop: 10 }}>
+                  Saves your answers and shortlist to your account, so they&apos;re here next time you sign in.
+                </p>
 
-              <div className="divider">or</div>
+                <div className="divider">or</div>
 
-              <div className="field">
-                <label htmlFor="nm">Your name</label>
-                <input id="nm" type="text" placeholder="Ibrahim Battisha" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+                <div className="field">
+                  <label htmlFor="nm">Your name</label>
+                  <input id="nm" type="text" placeholder="Ibrahim Battisha" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+                </div>
+                <div className="field">
+                  <label htmlFor="em">Email</label>
+                  <input id="em" type="email" placeholder="you@example.com" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                </div>
+                <button className="btn" style={{ width: "100%" }} onClick={createProfile}>
+                  Continue without an account
+                </button>
+                <p className="note" style={{ marginTop: 14 }}>
+                  Saved in this browser only — not tied to an account, and won&apos;t follow you to another device.
+                </p>
               </div>
-              <div className="field">
-                <label htmlFor="em">Email</label>
-                <input id="em" type="email" placeholder="you@example.com" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+
+              <div className="auth-side">
+                <h3>What you get</h3>
+                <ul className="check-list">
+                  <li>
+                    <span className="checkdot">✓</span>
+                    Real, live listings searched worldwide the moment you finish — not a stale database.
+                  </li>
+                  <li>
+                    <span className="checkdot">✓</span>
+                    Everything ranked by how you&apos;d actually get there: drive, ride, transit, or remote.
+                  </li>
+                  <li>
+                    <span className="checkdot">✓</span>
+                    High schoolers get real nearby businesses to cold-pitch, with a ready-to-send email — not fake
+                    listings that require a college degree.
+                  </li>
+                  <li>
+                    <span className="checkdot">✓</span>
+                    One click to apply, or a drafted email when there&apos;s no application link.
+                  </li>
+                </ul>
               </div>
-              <button className="btn" style={{ width: "100%" }} onClick={createProfile}>
-                Continue without an account
-              </button>
-              <p className="note" style={{ marginTop: 14 }}>
-                Saved in this browser only — not tied to an account, and won&apos;t follow you to another device.
-              </p>
             </div>
           </div>
         </main>
@@ -815,19 +939,13 @@ export default function HomeClient() {
                 {answers.stage === "hs" && (
                   <p className="note" style={{ marginTop: 4 }}>
                     Real internships open to high schoolers are almost nonexistent as formal job postings, so instead
-                    of listings, these are actual nearby businesses matched to what you're interested in. None of
-                    them have a posted opening — tap one for the full pitch and a sample cold email.
+                    of listings, these are actual nearby businesses matched to what you&apos;re interested in. None
+                    of them have a posted opening — tap one for the full pitch and a sample cold email.
                   </p>
                 )}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <button
-                  className="btn ghost sm"
-                  onClick={() => {
-                    setQIndex(0);
-                    setView("q");
-                  }}
-                >
+                <button className="btn ghost sm" onClick={() => go("q", 0)}>
                   Change answers
                 </button>
                 <button className="btn ghost sm" onClick={() => csvDownload(results)}>
@@ -836,51 +954,53 @@ export default function HomeClient() {
               </div>
             </div>
 
-            {results.length > 0 && (
-              <>
-                <ResultsStats results={results} lim={effectiveLim} />
+            {results.length > 0 ? (
+              <div className="res-grid">
+                <aside className="res-side">
+                  <ResultsStats results={results} lim={effectiveLim} />
 
-                <div className="dialrow">
-                  <Dial list={resDial} size={resDialSize} />
-                </div>
+                  <div className="dialrow">
+                    <Dial list={resDial} size={Math.min(resDialSize, 240)} />
+                  </div>
 
-                <div className="legend">
-                  <span>
-                    <i className="dot" style={{ background: "var(--near)" }} /> within your range
-                  </span>
-                  <span>
-                    <i className="dot" style={{ background: "var(--mid)" }} /> a stretch
-                  </span>
-                  <span>
-                    <i className="dot" style={{ background: "var(--far)" }} /> too far to commute
-                  </span>
-                  <span>each ring is a distance band from where you are</span>
-                </div>
+                  <div className="legend">
+                    <span>
+                      <i className="dot" style={{ background: "var(--near)" }} /> within your range
+                    </span>
+                    <span>
+                      <i className="dot" style={{ background: "var(--mid)" }} /> a stretch
+                    </span>
+                    <span>
+                      <i className="dot" style={{ background: "var(--far)" }} /> too far to commute
+                    </span>
+                    <span>each ring is a distance band from where you are</span>
+                  </div>
 
-                <div className="tabs">
-                  {["Best matches", "Closest first", "Most recent"].map((t, i) => (
-                    <button key={t} className={`tab${i === tab ? " on" : ""}`} onClick={() => setTab(i)}>
-                      {t}
-                    </button>
+                  <div className="tabs">
+                    {["Best matches", "Closest first", "Most recent"].map((t, i) => (
+                      <button key={t} className={`tab${i === tab ? " on" : ""}`} onClick={() => setTab(i)}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </aside>
+
+                <div className="list">
+                  {sortedList.map((c, i) => (
+                    <ResultRow
+                      key={c.id}
+                      c={c}
+                      rank={i + 1}
+                      lead={i < 3 && tab === 0}
+                      band={band(c.d, effectiveLim)}
+                      lim={effectiveLim}
+                      onContact={setContactFor}
+                    />
                   ))}
                 </div>
-              </>
-            )}
-
-            <div className="list">
-              {sortedList.length ? (
-                sortedList.map((c, i) => (
-                  <ResultRow
-                    key={c.id}
-                    c={c}
-                    rank={i + 1}
-                    lead={i < 3 && tab === 0}
-                    band={band(c.d, effectiveLim)}
-                    lim={effectiveLim}
-                    onContact={setContactFor}
-                  />
-                ))
-              ) : (
+              </div>
+            ) : (
+              <div className="list">
                 <div className="empty">
                   {answers.stage === "hs"
                     ? "Couldn't find nearby businesses matching this — try widening the distance on question 2, or a bigger nearby city."
@@ -888,8 +1008,8 @@ export default function HomeClient() {
                       ? "Try a city in a country we have live coverage for."
                       : "Nothing matched. Try widening the distance on question 2, or a bigger nearby city."}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </main>
       )}
