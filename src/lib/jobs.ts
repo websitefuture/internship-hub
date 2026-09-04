@@ -32,6 +32,16 @@ function guessRemote(text: string): "remote" | "hybrid" | "onsite" {
   return "onsite";
 }
 
+const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
+
+// Most Adzuna postings route applications through their own redirect_url and never
+// mention an email — this only finds one when a listing genuinely includes one in its
+// own text, so we never have to invent a contact address that doesn't exist.
+function extractEmail(text: string): string | null {
+  const m = text.match(EMAIL_RE);
+  return m ? m[0] : null;
+}
+
 async function fetchPage(countryCode: string, cityLabel: string, page: number, appId: string, appKey: string): Promise<AdzunaResult[]> {
   const params = new URLSearchParams({
     app_id: appId,
@@ -81,6 +91,7 @@ export async function searchInternships(opts: { countryCode: string; cityLabel: 
         created: r.created ?? null,
         remoteGuess: guessRemote(combinedText),
         unpaidMentioned: combinedText.toLowerCase().includes("unpaid"),
+        contactEmail: extractEmail(combinedText),
       });
     }
   }

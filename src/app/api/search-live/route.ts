@@ -3,7 +3,7 @@ import { reverseGeocode } from "@/lib/geocode";
 import { ADZUNA_COUNTRIES, searchInternships } from "@/lib/jobs";
 import { miles } from "@/lib/geo";
 import { getDriveTimes } from "@/lib/routing";
-import { scoreLive } from "@/lib/scoring";
+import { excludesHighSchoolers, scoreLive } from "@/lib/scoring";
 import type { Answers, DriveTime, LocationAnswer, RawListing } from "@/lib/types";
 
 const PRELIM_RADIUS_MILES = 300;
@@ -41,8 +41,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ results: [], coverage: true, error: "Search failed" });
   }
 
+  // A high schooler can't take a role that explicitly requires being enrolled in
+  // college/grad school — drop those instead of just ranking them lower.
+  let hsFilteredCount = 0;
+  if (answers.stage === "hs") {
+    const before = raw.length;
+    raw = raw.filter((l) => !excludesHighSchoolers(l));
+    hsFilteredCount = before - raw.length;
+  }
+
   if (raw.length === 0) {
-    return NextResponse.json({ results: [], coverage: true });
+    return NextResponse.json({ results: [], coverage: true, hsFilteredCount });
   }
 
   const prelim = raw
@@ -62,5 +71,5 @@ export async function POST(req: Request) {
   }
 
   const scored = scoreLive(answers, { lat: loc.lat, lng: loc.lng }, prelim.map((x) => x.r), driveTimes);
-  return NextResponse.json({ results: scored, coverage: true });
+  return NextResponse.json({ results: scored, coverage: true, hsFilteredCount });
 }

@@ -73,6 +73,157 @@ function isAnswerEmpty(q: Question, answers: Answers): boolean {
   return !v;
 }
 
+function draftEmail(c: ScoredListing): { subject: string; body: string } {
+  return {
+    subject: `Application: ${c.title}`,
+    body: `Hi ${c.company} team,
+
+My name is [Your Name], and I'm interested in the ${c.title} role near ${c.locationLabel}.
+
+[A sentence or two on why you're a good fit — personalize this before sending.]
+
+I've attached my resume for your review. Please let me know if you need anything else from me.
+
+Thank you for your time,
+[Your Name]
+[Your phone or email]`,
+  };
+}
+
+function ContactModal({ listing, onClose }: { listing: ScoredListing; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const { subject, body } = draftEmail(listing);
+  const fullText = `Subject: ${subject}\n\n${body}`;
+  const mailHref = listing.contactEmail
+    ? `mailto:${listing.contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`
+    : null;
+
+  function copyEmail() {
+    navigator.clipboard
+      .writeText(fullText)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {});
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <button className="modal-close" onClick={onClose} aria-label="Close">
+          ×
+        </button>
+        <h2 style={{ marginBottom: 4 }}>{listing.title}</h2>
+        <p className="note" style={{ marginBottom: 16 }}>
+          {listing.company} · {listing.locationLabel}
+          {listing.category ? ` · ${listing.category}` : ""}
+        </p>
+        <p className="desc">{listing.description}</p>
+        <p className="desc" style={{ color: "var(--ink-3)" }}>
+          {payLabel(listing)} · {listing.remoteGuess === "remote" ? "Remote" : listing.remoteGuess === "hybrid" ? "Hybrid" : "In person"}
+        </p>
+
+        <div className="contact-block">
+          <h3>Contact</h3>
+          {listing.contactEmail ? (
+            <p className="desc">
+              Found in this listing: <a href={`mailto:${listing.contactEmail}`}>{listing.contactEmail}</a>
+            </p>
+          ) : (
+            <p className="note">
+              This listing doesn&apos;t include a direct apply link or a contact email — we&apos;re not going to
+              guess one. Try searching for {listing.company}&apos;s own careers page or LinkedIn.
+            </p>
+          )}
+        </div>
+
+        <div className="contact-block">
+          <h3>Sample email</h3>
+          <p className="note" style={{ marginBottom: 8 }}>
+            A starting point — personalize it before sending.
+          </p>
+          <pre className="email-draft">{fullText}</pre>
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            {mailHref && (
+              <a className="btn ghost sm" href={mailHref}>
+                Open in email app
+              </a>
+            )}
+            <button className="btn ghost sm" onClick={copyEmail}>
+              {copied ? "Copied!" : "Copy text"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ResultRow({
+  c,
+  rank,
+  lead,
+  band: bandClass,
+  lim,
+  onContact,
+}: {
+  c: ScoredListing;
+  rank: number;
+  lead: boolean;
+  band: "near" | "mid" | "far" | null;
+  lim: number;
+  onContact: (c: ScoredListing) => void;
+}) {
+  const className = `row${lead ? " lead" : ""}${bandClass ? ` band-${bandClass}` : ""}`;
+  const inner = (
+    <>
+      <div className="rank">{rank}</div>
+      <div>
+        <h3>{c.title}</h3>
+        <div className="meta">
+          <Pill d={c.d} lim={lim} /> &nbsp;{c.company} · {c.locationLabel}
+        </div>
+        <p className="desc">{c.description ? `${c.description.slice(0, 220)}${c.description.length > 220 ? "…" : ""}` : ""}</p>
+        <p className="desc" style={{ color: "var(--ink-3)" }}>
+          {payLabel(c)} · {c.remoteGuess === "remote" ? "Remote" : c.remoteGuess === "hybrid" ? "Hybrid" : "In person"}
+        </p>
+        <p className="why">{why(c)}</p>
+      </div>
+      <div className="score">
+        <b>{c.s}</b>
+        <span>of 100</span>
+        <span className="applyhint">{c.url ? "Apply ↗" : "Contact →"}</span>
+      </div>
+    </>
+  );
+
+  if (c.url) {
+    return (
+      <a className={className} href={c.url} target="_blank" rel="noopener noreferrer">
+        {inner}
+      </a>
+    );
+  }
+
+  return (
+    <div
+      className={className}
+      role="button"
+      tabIndex={0}
+      onClick={() => onContact(c)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onContact(c);
+        }
+      }}
+    >
+      {inner}
+    </div>
+  );
+}
+
 export default function HomeClient() {
   const { data: session, status } = useSession();
   const [view, setView] = useState<View>("landing");
@@ -83,6 +234,8 @@ export default function HomeClient() {
   const [tab, setTab] = useState(0);
   const [results, setResults] = useState<ScoredListing[] | null>(null);
   const [coverage, setCoverage] = useState(true);
+  const [hsFilteredCount, setHsFilteredCount] = useState(0);
+  const [contactFor, setContactFor] = useState<ScoredListing | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [locMsg, setLocMsg] = useState<{ text: string; err?: boolean } | null>(null);
@@ -253,6 +406,7 @@ export default function HomeClient() {
       const computed: ScoredListing[] = data.results || [];
       setResults(computed);
       setCoverage(data.coverage !== false);
+      setHsFilteredCount(data.hsFilteredCount || 0);
       setTab(0);
       setView("res");
       if (status === "authenticated") {
@@ -507,6 +661,15 @@ export default function HomeClient() {
                     ? `${results.length} live listings ranked from ${answers.loc!.label}.`
                     : `We don't have live coverage for ${answers.loc!.label} yet — coverage today is the US, UK, Canada, Australia, and about a dozen more countries, mostly in Europe.`}
                 </p>
+                {answers.stage === "hs" && (
+                  <p className="note" style={{ marginTop: 4 }}>
+                    {hsFilteredCount > 0
+                      ? `Hid ${hsFilteredCount} listing${hsFilteredCount === 1 ? "" : "s"} that explicitly required being enrolled in college or grad school. `
+                      : ""}
+                    We can only check what the listing itself says — the full posting behind &quot;Apply&quot;
+                    could still turn out to require a degree.
+                  </p>
+                )}
               </div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button
@@ -557,34 +720,24 @@ export default function HomeClient() {
 
             <div className="list">
               {sortedList.length ? (
-                sortedList.map((c, i) => {
-                  const b = band(c.d, parseFloat(answers.max || "30"));
-                  return (
-                    <div key={c.id} className={`row${i < 3 && tab === 0 ? " lead" : ""}${b ? ` band-${b}` : ""}`}>
-                      <div className="rank">{i + 1}</div>
-                      <div>
-                        <h3>{c.title}</h3>
-                        <div className="meta">
-                          <Pill d={c.d} lim={parseFloat(answers.max || "30")} /> &nbsp;{c.company} · {c.locationLabel}
-                        </div>
-                        <p className="desc">{c.description ? `${c.description.slice(0, 220)}${c.description.length > 220 ? "…" : ""}` : ""}</p>
-                        <p className="desc" style={{ color: "var(--ink-3)" }}>
-                          {payLabel(c)} · {c.remoteGuess === "remote" ? "Remote" : c.remoteGuess === "hybrid" ? "Hybrid" : "In person"}
-                        </p>
-                        <p className="why">{why(c)}</p>
-                      </div>
-                      <div className="score">
-                        <b>{c.s}</b>
-                        <span>of 100</span>
-                      </div>
-                    </div>
-                  );
-                })
+                sortedList.map((c, i) => (
+                  <ResultRow
+                    key={c.id}
+                    c={c}
+                    rank={i + 1}
+                    lead={i < 3 && tab === 0}
+                    band={band(c.d, parseFloat(answers.max || "30"))}
+                    lim={parseFloat(answers.max || "30")}
+                    onContact={setContactFor}
+                  />
+                ))
               ) : (
                 <div className="empty">
-                  {coverage
-                    ? "Nothing matched. Try widening the distance on question 2, or a bigger nearby city."
-                    : "Try a city in a country we have live coverage for."}
+                  {!coverage
+                    ? "Try a city in a country we have live coverage for."
+                    : hsFilteredCount > 0
+                      ? "Everything we found near you required being enrolled in college or grad school — try a bigger nearby city, or check back later."
+                      : "Nothing matched. Try widening the distance on question 2, or a bigger nearby city."}
                 </div>
               )}
             </div>
@@ -602,6 +755,8 @@ export default function HomeClient() {
           Europe.
         </div>
       </footer>
+
+      {contactFor && <ContactModal listing={contactFor} onClose={() => setContactFor(null)} />}
     </>
   );
 }

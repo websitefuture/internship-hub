@@ -86,6 +86,7 @@ export interface RawListing {
   created: string | null;
   remoteGuess: "remote" | "hybrid" | "onsite";
   unpaidMentioned: boolean;
+  contactEmail: string | null; // pulled from the listing text itself, when a listing includes one
 }
 
 export type LiveScoreParts = Record<"Commute" | "Role fit" | "Pay" | "Mode", number>;

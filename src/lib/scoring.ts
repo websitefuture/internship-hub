@@ -36,6 +36,29 @@ const TRANSIT_VS_DRIVE_MULTIPLIER = 2.3;
 const RELEVANCE_FLOOR_THRESHOLD = 0.4;
 const RELEVANCE_FLOOR_MIN = 0.5;
 
+// Signals that a listing is explicitly scoped to college/grad students — a real
+// degree requirement, not just "smart, motivated students welcome." A high schooler
+// can't meet these, so listings matching any of these are dropped entirely for them
+// rather than merely down-ranked (a high score they can't actually act on is worse
+// than no listing at all).
+const HS_INELIGIBLE_PATTERNS: RegExp[] = [
+  /\bbachelor'?s?\b/i,
+  /\bmaster'?s?\b/i,
+  /\bphd\b/i,
+  /\bdoctoral\b/i,
+  /\bgraduate\b/i, // catches "graduate student", "Intern, Graduate", and Adzuna's "Graduate Jobs" category — not "undergraduate" (no word boundary before "graduate" there)
+  /undergraduate/i,
+  /college (junior|senior|sophomore|student)/i,
+  /university student/i,
+  /currently enrolled (in|at)\s+(an?\s+)?(accredited\s+)?(college|university)/i,
+  /pursuing a (bachelor|master|doctoral|graduate) degree/i,
+];
+
+export function excludesHighSchoolers(listing: RawListing): boolean {
+  const text = `${listing.title} ${listing.category} ${listing.description}`;
+  return HS_INELIGIBLE_PATTERNS.some((re) => re.test(text));
+}
+
 function roleFit(roles: RoleKey[], listing: RawListing): number {
   const title = listing.title.toLowerCase();
   const body = `${listing.category} ${listing.description}`.toLowerCase();
