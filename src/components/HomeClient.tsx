@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { signIn, signOut, useSession } from "next-auth/react";
 import Dial from "@/components/Dial";
 import { bearing, miles } from "@/lib/geo";
 import { CITIES, QUESTIONS } from "@/lib/questions";
@@ -57,6 +58,7 @@ function csvDownload(res: ScoredCompany[]) {
 const HERO_ORIGIN = { lat: 37.2872, lng: -121.95 }; // Campbell — matches the prototype's hero demo
 
 export default function HomeClient({ companies }: { companies: Company[] }) {
+  const { data: session, status } = useSession();
   const [view, setView] = useState<View>("landing");
   const [user, setUser] = useState<UserProfile | null>(null);
   const [answers, setAnswers] = useState<Answers>({});
@@ -66,17 +68,12 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
   const [results, setResults] = useState<ScoredCompany[] | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [showGoogleNote, setShowGoogleNote] = useState(false);
   const [locMsg, setLocMsg] = useState<{ text: string; err?: boolean } | null>(null);
   const [geoBusy, setGeoBusy] = useState(false);
   const [dialSize, setDialSize] = useState(400);
   const [resDialSize, setResDialSize] = useState(360);
 
   useEffect(() => {
-    const p = load<UserProfile>("profile");
-    if (p) setUser(p);
-    const a = load<Answers>("answers");
-    if (a) setAnswers(a);
     const resize = () => {
       setDialSize(Math.max(200, Math.min(400, window.innerWidth - 70)));
       setResDialSize(Math.max(200, Math.min(360, window.innerWidth - 70)));
@@ -85,6 +82,24 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
     window.addEventListener("resize", resize);
     return () => window.removeEventListener("resize", resize);
   }, []);
+
+  useEffect(() => {
+    if (status === "loading") return;
+    if (status === "authenticated" && session.user) {
+      setUser((prev) => ({ name: session.user!.name ?? "You", email: session.user!.email ?? "", lat: prev?.lat, lng: prev?.lng }));
+      fetch("/api/user-data")
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.answers) setAnswers(data.answers);
+        })
+        .catch(() => {});
+    } else {
+      const p = load<UserProfile>("profile");
+      if (p) setUser(p);
+      const a = load<Answers>("answers");
+      if (a) setAnswers(a);
+    }
+  }, [status, session]);
 
   const heroDial: PlottedCompany[] = useMemo(() => {
     const demo = companies.filter((c) => c.lat !== null).map((c) => {
@@ -96,9 +111,11 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
     return demo;
   }, [companies]);
 
-  function signOut() {
+  async function handleSignOut() {
+    if (status === "authenticated") await signOut({ redirect: false });
     setUser(null);
     setAnswers({});
+    setResults(null);
     save("profile", null);
     save("answers", null);
     setView("landing");
@@ -175,13 +192,22 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
     if (qIndex < QUESTIONS.length - 1) {
       setQIndex((i) => i + 1);
     } else {
-      save("answers", answers);
       const loc = answers.loc!;
       const finalUser: UserProfile = { ...user!, lat: loc.lat, lng: loc.lng };
       setUser(finalUser);
-      setResults(score(answers, finalUser, companies));
+      const computed = score(answers, finalUser, companies);
+      setResults(computed);
       setTab(0);
       setView("res");
+      if (status === "authenticated") {
+        fetch("/api/user-data", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers, results: computed }),
+        }).catch(() => {});
+      } else {
+        save("answers", answers);
+      }
     }
   }
 
@@ -230,7 +256,7 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
             {user ? (
               <>
                 {user.name}{" "}
-                <button className="linkbtn" onClick={signOut}>
+                <button className="linkbtn" onClick={handleSignOut}>
                   Sign out
                 </button>
               </>
@@ -264,7 +290,7 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
             </div>
             <div>
               <h3>Distance first</h3>
-              <p>Your browser can share your location, or you can pick a city. Nothing is stored on a server.</p>
+              <p>Your browser can share your location, or you can pick a city. Sign in to save it, or skip the account entirely.</p>
             </div>
             <div>
               <h3>175 companies</h3>
@@ -283,7 +309,7 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
                 So your answers and shortlist are here when you come back.
               </p>
 
-              <button className="gbtn" onClick={() => setShowGoogleNote(true)}>
+              <button className="gbtn" onClick={() => signIn("google")}>
                 <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">
                   <path fill="#4285F4" d="M45 24c0-1.6-.1-2.7-.4-4H24v8h12c-.2 2-1.5 5-4.4 7l6.7 5.2C42.2 36.3 45 30.7 45 24z" />
                   <path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.4C29.7 36.6 27.1 37.4 24 37.4c-5.7 0-10.6-3.8-12.3-9.1l-7.1 5.5C8.1 41.3 15.4 46 24 46z" />
@@ -292,12 +318,9 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
                 </svg>
                 Continue with Google
               </button>
-              {showGoogleNote && (
-                <div className="note warn">
-                  Google sign-in needs a server to hold the OAuth secret, and this version runs entirely in your
-                  browser. Use your name and email below instead. It works the same way here.
-                </div>
-              )}
+              <p className="note" style={{ marginTop: 10 }}>
+                Saves your answers and shortlist to your account, so they&apos;re here next time you sign in.
+              </p>
 
               <div className="divider">or</div>
 
@@ -310,10 +333,10 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
                 <input id="em" type="email" placeholder="you@example.com" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
               </div>
               <button className="btn" style={{ width: "100%" }} onClick={createProfile}>
-                Create profile
+                Continue without an account
               </button>
               <p className="note" style={{ marginTop: 14 }}>
-                Saved in your browser only. No account server, no email sent, nothing shared.
+                Saved in this browser only — not tied to an account, and won&apos;t follow you to another device.
               </p>
             </div>
           </div>
