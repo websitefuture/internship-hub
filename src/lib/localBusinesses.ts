@@ -15,12 +15,18 @@ import type { RawListing, RoleKey } from "./types";
 // has to scan every subtype of that tag) reliably timed out once combined with even one more
 // filter, while a handful of regex-narrowed value filters stayed fast. This also keeps the
 // categories realistic for what a teen could plausibly walk into and ask about.
+// "office=it" is OSM's tag for a software/IT company, the closest real proxy this data has
+// for "tech company." Design, marketing, eng, and data are the roles a student most plausibly
+// wants at a tech company specifically (vs. trades/healthcare/hospitality/retail, which are
+// genuinely local-business roles), so each of those includes it — on top of the role's own
+// more specific category — rather than only generic non-tech offices like real estate or
+// insurance agencies, which read as an obviously wrong match for "I want a design internship."
 const ROLE_OSM_FILTERS: Record<RoleKey, string[]> = {
-  marketing: ['["office"~"^(advertising_agency|marketing|newspaper|publisher)$"]'],
-  ops: ['["office"~"^(estate_agent|insurance|company|consulting|financial|coworking)$"]'],
+  marketing: ['["office"~"^(it|advertising_agency|marketing|newspaper|publisher)$"]'],
+  ops: ['["office"~"^(it|company|consulting|financial|coworking)$"]'],
   eng: ['["office"~"^(it|engineer|telecommunication)$"]', '["shop"="computer"]'],
-  design: ['["office"="architect"]', '["craft"~"^(photographer|sign_maker)$"]'],
-  data: ['["office"~"^(it|research|company)$"]'],
+  design: ['["office"~"^(it|architect)$"]', '["craft"~"^(photographer|sign_maker)$"]'],
+  data: ['["office"~"^(it|research)$"]'],
   trades: ['["craft"~"^(electrician|plumber|carpenter|hvac|painter|roofer|metal_construction)$"]'],
   healthcare: ['["amenity"~"^(clinic|dentist|veterinary|pharmacy)$"]'],
   hospitality: ['["amenity"~"^(restaurant|cafe|fast_food|bar|ice_cream)$"]', '["tourism"="hotel"]'],

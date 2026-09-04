@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import Dial, { type DialPoint } from "@/components/Dial";
 import { bearing } from "@/lib/geo";
 import { QUESTIONS } from "@/lib/questions";
+import { radiusMilesForAnswers } from "@/lib/localBusinesses";
 import { load, save } from "@/lib/storage";
-import type { Answers, GeoResult, Question, ScoredListing, UserProfile } from "@/lib/types";
+import type { Answers, GeoResult, LocationAnswer, Question, ScoredListing, UserProfile } from "@/lib/types";
 
 type View = "landing" | "auth" | "q" | "res";
 
@@ -35,13 +36,30 @@ function band(d: number | null, lim: number): "near" | "mid" | "far" | null {
 }
 
 function Pill({ d, lim }: { d: number | null; lim: number }) {
-  if (d === null || d === undefined) return <span className="pill" style={{ background: "#3A4B46" }}>Remote</span>;
-  const col = d <= lim ? "var(--near)" : d <= lim * 2 ? "var(--mid)" : "var(--far)";
-  return (
-    <span className="pill" style={{ background: col }}>
-      {Math.round(d)} mi
-    </span>
-  );
+  if (d === null || d === undefined) return <span className="pill pill-muted">Remote</span>;
+  const cls = d <= lim ? "pill-near" : d <= lim * 2 ? "pill-mid" : "pill-far";
+  return <span className={`pill ${cls}`}>{Math.round(d)} mi</span>;
+}
+
+// Deterministic pastel avatar (color + initial) for a company/business name — same palette
+// family as the near/mid/far distance colors plus two extras so cards don't all look alike.
+const AVATAR_PALETTE = [
+  { bg: "#FDEEDC", fg: "#B8551A" },
+  { bg: "#E4F3EE", fg: "#0E7C66" },
+  { bg: "#FCEFF1", fg: "#9E2B3E" },
+  { bg: "#FFF6D9", fg: "#8A6D14" },
+  { bg: "#EAF0FB", fg: "#2E4E9C" },
+  { bg: "#F2E9FB", fg: "#6B3FA0" },
+];
+function avatarStyle(name: string): { background: string; color: string } {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  const c = AVATAR_PALETTE[h % AVATAR_PALETTE.length];
+  return { background: c.bg, color: c.fg };
+}
+function initial(name: string): string {
+  const m = name.trim().match(/[A-Za-z0-9]/);
+  return m ? m[0].toUpperCase() : "?";
 }
 
 function payLabel(c: ScoredListing): string {
@@ -228,6 +246,9 @@ function ResultRow({
   const inner = (
     <>
       <div className="rank">{rank}</div>
+      <div className="avatar-sq" style={avatarStyle(c.company)} aria-hidden="true">
+        {initial(c.company)}
+      </div>
       <div>
         <h3>{c.title}</h3>
         <div className="meta">
@@ -235,9 +256,7 @@ function ResultRow({
           {c.coldOutreach && (
             <>
               {" "}
-              <span className="pill" style={{ background: "var(--mid)" }}>
-                No listed opening
-              </span>
+              <span className="pill pill-mid">No listed opening</span>
             </>
           )}
         </div>
@@ -319,21 +338,49 @@ export default function HomeClient() {
     if (status === "loading") return;
     if (status === "authenticated" && session.user) {
       const sessionUser = session.user;
-      const syncUser = () =>
-        setUser((prev) => ({ name: sessionUser.name ?? "You", email: sessionUser.email ?? "", lat: prev?.lat, lng: prev?.lng }));
+      const syncUser = (loc?: LocationAnswer | null) =>
+        setUser((prev) => ({
+          name: sessionUser.name ?? "You",
+          email: sessionUser.email ?? "",
+          lat: loc?.lat ?? prev?.lat,
+          lng: loc?.lng ?? prev?.lng,
+        }));
       fetch("/api/user-data")
         .then((r) => r.json())
-        .then((data) => {
-          syncUser();
+        .then((data: { answers?: Answers | null; results?: ScoredListing[] | null }) => {
+          syncUser(data.answers?.loc);
           if (data.answers) setAnswers(data.answers);
+          // Restore straight to the shortlist instead of making a returning user click
+          // through all nine questions again just to see the answers they already gave.
+          if (data.results && data.results.length) {
+            setResults(data.results);
+            setCoverage(true);
+            if (data.answers?.stage === "hs" && data.answers.loc) {
+              setHsRadiusMiles(radiusMilesForAnswers(data.answers.max));
+              setHsCity(data.answers.loc.label);
+            }
+            setTab(0);
+            setView("res");
+          }
         })
-        .catch(syncUser);
+        .catch(() => syncUser());
     } else {
       Promise.resolve().then(() => {
         const p = load<UserProfile>("profile");
-        if (p) setUser(p);
         const a = load<Answers>("answers");
+        if (p) setUser(a?.loc ? { ...p, lat: a.loc.lat, lng: a.loc.lng } : p);
         if (a) setAnswers(a);
+        const r = load<ScoredListing[]>("results");
+        if (r && r.length && a?.loc) {
+          setResults(r);
+          setCoverage(true);
+          if (a.stage === "hs") {
+            setHsRadiusMiles(radiusMilesForAnswers(a.max));
+            setHsCity(a.loc.label);
+          }
+          setTab(0);
+          setView("res");
+        }
       });
     }
   }, [status, session]);
@@ -485,7 +532,9 @@ export default function HomeClient() {
           body: JSON.stringify({ answers, results: computed }),
         }).catch(() => {});
       } else {
+        save("profile", finalUser);
         save("answers", answers);
+        save("results", computed);
       }
     } catch {
       setQHint("Search failed — check your connection and try again.");
@@ -503,9 +552,17 @@ export default function HomeClient() {
     }
   }
 
+  // High-school results are capped to a much tighter real search radius (see
+  // radiusMilesForAnswers) than the raw "how far will you travel" answer, which is also used
+  // to weight commute scoring for regular listings — so distance bands/rings need this instead
+  // of the raw answer, or a "within 30 miles" stat card would be shown when every result is
+  // actually within 10.
+  const effectiveLim =
+    answers.stage === "hs" ? hsRadiusMiles || radiusMilesForAnswers(answers.max) : parseFloat(answers.max || "30");
+
   const resDial: DialPoint[] = useMemo(() => {
     if (!results || !user?.lat) return [];
-    const lim = parseFloat(answers.max || "30");
+    const lim = effectiveLim;
     const withB: DialPoint[] = results.map((c) => ({
       label: c.title,
       d: c.d,
@@ -514,7 +571,7 @@ export default function HomeClient() {
     }));
     withB.slice(0, 25).forEach((c) => (c.top = true));
     return withB;
-  }, [results, user, answers.max]);
+  }, [results, user, effectiveLim]);
 
   const sortedList = useMemo(() => {
     if (!results) return [];
@@ -538,16 +595,17 @@ export default function HomeClient() {
             </svg>
             Internship Hub
           </div>
-          <div className="who">
-            {user ? (
-              <>
-                {user.name}{" "}
-                <button className="linkbtn" onClick={handleSignOut}>
-                  Sign out
-                </button>
-              </>
-            ) : null}
-          </div>
+          {user && (
+            <div className="who">
+              <span className="avatar" style={avatarStyle(user.name)} aria-hidden="true">
+                {initial(user.name)}
+              </span>
+              <span className="who-name">{user.name}</span>
+              <button className="linkbtn" onClick={handleSignOut}>
+                Sign out
+              </button>
+            </div>
+          )}
         </div>
       </header>
 
@@ -569,14 +627,36 @@ export default function HomeClient() {
 
           <div className="fact-list">
             <div>
+              <div className="ficon" style={{ background: "#FDEEDC" }}>
+                <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path d="M4 6h12M4 10h12M4 14h8" stroke="#B8551A" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              </div>
               <h3>Nine questions</h3>
               <p>Where you are, how far you&apos;ll go, how you get there, and what you want to do. Two minutes.</p>
             </div>
             <div>
+              <div className="ficon" style={{ background: "#E4F3EE" }}>
+                <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <path
+                    d="M10 18s6-5.2 6-9.6A6 6 0 0 0 4 8.4C4 12.8 10 18 10 18Z"
+                    stroke="#0E7C66"
+                    strokeWidth="2"
+                    strokeLinejoin="round"
+                  />
+                  <circle cx="10" cy="8.4" r="2" stroke="#0E7C66" strokeWidth="2" />
+                </svg>
+              </div>
               <h3>Distance first</h3>
               <p>Your browser can share your location, or search any city in the world. Sign in to save it, or skip the account entirely.</p>
             </div>
             <div>
+              <div className="ficon" style={{ background: "#EAF0FB" }}>
+                <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <circle cx="10" cy="10" r="7.5" stroke="#2E4E9C" strokeWidth="2" />
+                  <path d="M2.5 10h15M10 2.5c2.5 2 2.5 13 0 15M10 2.5c-2.5 2-2.5 13 0 15" stroke="#2E4E9C" strokeWidth="1.4" />
+                </svg>
+              </div>
               <h3>Live, worldwide</h3>
               <p>The moment you finish, we search real internship listings near you and rank them by distance and fit.</p>
             </div>
@@ -727,7 +807,7 @@ export default function HomeClient() {
                 <h2>{answers.stage === "hs" ? "Businesses worth pitching" : "Your shortlist"}</h2>
                 <p className="note" style={{ marginTop: 6 }}>
                   {answers.stage === "hs"
-                    ? `${results.length} real businesses within ${hsRadiusMiles || parseFloat(answers.max || "15")} miles of ${hsCity || answers.loc!.label}.`
+                    ? `${results.length} real businesses within ${effectiveLim} miles of ${hsCity || answers.loc!.label}.`
                     : coverage
                       ? `${results.length} live listings ranked from ${answers.loc!.label}.`
                       : `We don't have live coverage for ${answers.loc!.label} yet — coverage today is the US, UK, Canada, Australia, and about a dozen more countries, mostly in Europe.`}
@@ -758,7 +838,7 @@ export default function HomeClient() {
 
             {results.length > 0 && (
               <>
-                <ResultsStats results={results} lim={parseFloat(answers.max || "30")} />
+                <ResultsStats results={results} lim={effectiveLim} />
 
                 <div className="dialrow">
                   <Dial list={resDial} size={resDialSize} />
@@ -795,8 +875,8 @@ export default function HomeClient() {
                     c={c}
                     rank={i + 1}
                     lead={i < 3 && tab === 0}
-                    band={band(c.d, parseFloat(answers.max || "30"))}
-                    lim={parseFloat(answers.max || "30")}
+                    band={band(c.d, effectiveLim)}
+                    lim={effectiveLim}
                     onContact={setContactFor}
                   />
                 ))
@@ -814,7 +894,8 @@ export default function HomeClient() {
         </main>
       )}
 
-      <footer>
+      {view === "res" && (
+        <footer>
         <div className="wrap">
           {answers.stage === "hs" ? (
             <>
@@ -835,43 +916,86 @@ export default function HomeClient() {
             </>
           )}
         </div>
-      </footer>
+        </footer>
+      )}
 
       {contactFor && <ContactModal listing={contactFor} onClose={() => setContactFor(null)} />}
     </>
   );
 }
 
+function StatCard({ icon, iconBg, value, label }: { icon: ReactNode; iconBg: string; value: number | string; label: string }) {
+  return (
+    <div className="statcard">
+      <div className="icon" style={{ background: iconBg }}>
+        {icon}
+      </div>
+      <b>{value}</b>
+      <span>{label}</span>
+    </div>
+  );
+}
+
 function ResultsStats({ results, lim }: { results: ScoredListing[]; lim: number }) {
   const near = results.filter((c) => c.d !== null && c.d <= lim).length;
   const mid = results.filter((c) => c.d !== null && c.d > lim && c.d <= lim * 2).length;
-  const far = results.filter((c) => c.d !== null && c.d > lim * 2).length;
   const rem = results.filter((c) => c.d === null).length;
-  const total = Math.max(1, near + mid + far);
+  const best = results.length ? results[0].s : 0;
   return (
-    <div className="distbar-wrap">
-      <div className="distbar">
-        <span style={{ flexBasis: `${(near / total) * 100}%`, background: "var(--near)" }} />
-        <span style={{ flexBasis: `${(mid / total) * 100}%`, background: "var(--mid)" }} />
-        <span style={{ flexBasis: `${(far / total) * 100}%`, background: "var(--far)" }} />
-      </div>
-      <div className="distbar-key">
-        <div>
-          <b>{near}</b>
-          <span>within {lim} miles</span>
-        </div>
-        <div>
-          <b>{mid}</b>
-          <span>
-            a stretch, {lim}–{lim * 2} miles
-          </span>
-        </div>
-        <div>
-          <b>{far}</b>
-          <span>too far to commute</span>
-        </div>
-      </div>
-      {rem > 0 && <p className="readout">{rem} are fully remote.</p>}
+    <div className="statcards">
+      <StatCard
+        iconBg="#FDEEDC"
+        icon={
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <rect x="3" y="6" width="14" height="10" rx="2" stroke="#B8551A" strokeWidth="1.8" />
+            <path d="M7 6V5a3 3 0 0 1 6 0v1" stroke="#B8551A" strokeWidth="1.8" />
+          </svg>
+        }
+        value={results.length}
+        label="Total matches"
+      />
+      <StatCard
+        iconBg="#E4F3EE"
+        icon={
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path
+              d="M10 18s6-5.2 6-9.6A6 6 0 0 0 4 8.4C4 12.8 10 18 10 18Z"
+              stroke="#0E7C66"
+              strokeWidth="1.8"
+              strokeLinejoin="round"
+            />
+            <circle cx="10" cy="8.4" r="1.8" stroke="#0E7C66" strokeWidth="1.8" />
+          </svg>
+        }
+        value={near}
+        label={`Within ${lim} miles`}
+      />
+      <StatCard
+        iconBg="#FFF6D9"
+        icon={
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <circle cx="10" cy="10" r="7" stroke="#8A6D14" strokeWidth="1.8" />
+            <path d="M10 6v4l3 2" stroke="#8A6D14" strokeWidth="1.8" strokeLinecap="round" />
+          </svg>
+        }
+        value={mid + rem}
+        label={rem > 0 ? "A stretch or remote" : "A stretch"}
+      />
+      <StatCard
+        iconBg="#EAF0FB"
+        icon={
+          <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+            <path
+              d="M10 2.5l2.2 4.6 5 .7-3.6 3.6.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.6 5-.7L10 2.5Z"
+              stroke="#2E4E9C"
+              strokeWidth="1.6"
+              strokeLinejoin="round"
+            />
+          </svg>
+        }
+        value={best}
+        label="Best score"
+      />
     </div>
   );
 }
