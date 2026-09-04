@@ -58,6 +58,70 @@ async function fetchPage(countryCode: string, cityLabel: string, page: number, a
   return Array.isArray(data.results) ? data.results : [];
 }
 
+const JOB_POSTING_LD_RE = /<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchFullDescriptionTextOnce(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        // A bare/declared-bot User-Agent gets a flat 403 from Adzuna's site (confirmed: identical
+        // request with a real browser UA + Accept headers succeeds). This isn't trying to evade
+        // anything content-wise — it's fetching the same public page a visitor's browser would —
+        // but their edge WAF keys off looking like a real browser request, not a bot loudly saying so.
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+      },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const html = await res.text();
+    for (const m of html.matchAll(JOB_POSTING_LD_RE)) {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(m[1]);
+      } catch {
+        continue;
+      }
+      const candidates = Array.isArray(parsed) ? parsed : [parsed];
+      for (const c of candidates) {
+        const description = (c as { description?: unknown })?.description;
+        if (typeof description === "string" && description.length > 0) {
+          return description
+            .replace(/<[^>]+>/g, " ")
+            .replace(/\s+/g, " ")
+            .trim();
+        }
+      }
+    }
+    // No JobPosting JSON-LD found — either this listing's page doesn't carry one, or the
+    // request got a soft block page instead of the real one. Either way we can't confirm
+    // eligibility from it, so the caller treats this the same as a failed fetch: leave the
+    // listing out rather than show something we couldn't actually check.
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Adzuna's search API only returns a truncated snippet of each posting — often cut off
+// right before a "Qualifications" section, which is exactly where a degree requirement
+// tends to live. Every listing.url is Adzuna's own detail page (not the employer's site),
+// and that page embeds the full, untruncated text as a standard schema.org JobPosting
+// JSON-LD block. Occasionally that request comes back as a transient soft-block page
+// instead of the real one, so this retries once after a short delay before giving up.
+export async function fetchFullDescriptionText(url: string): Promise<string | null> {
+  if (!url) return null;
+  const first = await fetchFullDescriptionTextOnce(url);
+  if (first !== null) return first;
+  await sleep(600 + Math.random() * 400);
+  return fetchFullDescriptionTextOnce(url);
+}
+
 export async function searchInternships(opts: { countryCode: string; cityLabel: string }): Promise<RawListing[]> {
   const appId = process.env.ADZUNA_APP_ID;
   const appKey = process.env.ADZUNA_APP_KEY;

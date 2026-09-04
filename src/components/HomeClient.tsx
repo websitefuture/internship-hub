@@ -235,6 +235,7 @@ export default function HomeClient() {
   const [results, setResults] = useState<ScoredListing[] | null>(null);
   const [coverage, setCoverage] = useState(true);
   const [hsFilteredCount, setHsFilteredCount] = useState(0);
+  const [hsUnverifiedCount, setHsUnverifiedCount] = useState(0);
   const [contactFor, setContactFor] = useState<ScoredListing | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -383,12 +384,21 @@ export default function HomeClient() {
     setUser(finalUser);
     setComputing(true);
 
-    const stages = [
-      "Searching real internship listings near you…",
-      "Checking real distances…",
-      "Matching against what you want to do…",
-      "Ranking your shortlist…",
-    ];
+    const stages =
+      answers.stage === "hs"
+        ? [
+            "Searching real internship listings near you…",
+            "Checking real distances…",
+            "Reading each listing's full posting to confirm high schoolers are eligible…",
+            "Matching against what you want to do…",
+            "Ranking your shortlist…",
+          ]
+        : [
+            "Searching real internship listings near you…",
+            "Checking real distances…",
+            "Matching against what you want to do…",
+            "Ranking your shortlist…",
+          ];
     let stage = 0;
     setProgressMsg(stages[0]);
     const stageTimer = setInterval(() => {
@@ -407,6 +417,7 @@ export default function HomeClient() {
       setResults(computed);
       setCoverage(data.coverage !== false);
       setHsFilteredCount(data.hsFilteredCount || 0);
+      setHsUnverifiedCount(data.hsUnverifiedCount || 0);
       setTab(0);
       setView("res");
       if (status === "authenticated") {
@@ -661,13 +672,16 @@ export default function HomeClient() {
                     ? `${results.length} live listings ranked from ${answers.loc!.label}.`
                     : `We don't have live coverage for ${answers.loc!.label} yet — coverage today is the US, UK, Canada, Australia, and about a dozen more countries, mostly in Europe.`}
                 </p>
-                {answers.stage === "hs" && (
+                {answers.stage === "hs" && (hsFilteredCount > 0 || hsUnverifiedCount > 0) && (
                   <p className="note" style={{ marginTop: 4 }}>
+                    We read the full posting behind every listing here and confirmed none of them require being
+                    enrolled in college or grad school.
                     {hsFilteredCount > 0
-                      ? `Hid ${hsFilteredCount} listing${hsFilteredCount === 1 ? "" : "s"} that explicitly required being enrolled in college or grad school. `
+                      ? ` Hid ${hsFilteredCount} listing${hsFilteredCount === 1 ? "" : "s"} that did.`
                       : ""}
-                    We can only check what the listing itself says — the full posting behind &quot;Apply&quot;
-                    could still turn out to require a degree.
+                    {hsUnverifiedCount > 0
+                      ? ` Left out ${hsUnverifiedCount} more we couldn't load to check.`
+                      : ""}
                   </p>
                 )}
               </div>
@@ -735,8 +749,8 @@ export default function HomeClient() {
                 <div className="empty">
                   {!coverage
                     ? "Try a city in a country we have live coverage for."
-                    : hsFilteredCount > 0
-                      ? "Everything we found near you required being enrolled in college or grad school — try a bigger nearby city, or check back later."
+                    : hsFilteredCount > 0 || hsUnverifiedCount > 0
+                      ? "Everything we found near you either required being enrolled in college or grad school, or we couldn't load the full posting to check — try a bigger nearby city, or check back later."
                       : "Nothing matched. Try widening the distance on question 2, or a bigger nearby city."}
                 </div>
               )}

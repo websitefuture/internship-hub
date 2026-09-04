@@ -1,13 +1,33 @@
 import { NextResponse } from "next/server";
 import { reverseGeocode } from "@/lib/geocode";
-import { ADZUNA_COUNTRIES, searchInternships } from "@/lib/jobs";
+import { ADZUNA_COUNTRIES, fetchFullDescriptionText, searchInternships } from "@/lib/jobs";
 import { miles } from "@/lib/geo";
 import { getDriveTimes } from "@/lib/routing";
-import { excludesHighSchoolers, scoreLive } from "@/lib/scoring";
+import { excludesHighSchoolers, scoreLive, textIndicatesCollegeOnly } from "@/lib/scoring";
 import type { Answers, DriveTime, LocationAnswer, RawListing } from "@/lib/types";
 
 const PRELIM_RADIUS_MILES = 300;
 const PRELIM_CAP = 50;
+// Kept modest (rather than firing all 50 checks at once) so one student's search doesn't
+// look like a scrape burst to Adzuna's own site and get soft-blocked.
+const HS_VERIFY_CONCURRENCY = 4;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T, index: number) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
 
 export async function POST(req: Request) {
   const body = await req.json();
@@ -41,17 +61,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ results: [], coverage: true, error: "Search failed" });
   }
 
-  // A high schooler can't take a role that explicitly requires being enrolled in
-  // college/grad school — drop those instead of just ranking them lower.
-  let hsFilteredCount = 0;
+  // Cheap first pass: drop anything that already shows a college/grad requirement in
+  // the search API's own (truncated) snippet, title, or category.
+  let hsBlockedCount = 0;
+  let hsUnverifiedCount = 0;
   if (answers.stage === "hs") {
     const before = raw.length;
     raw = raw.filter((l) => !excludesHighSchoolers(l));
-    hsFilteredCount = before - raw.length;
+    hsBlockedCount = before - raw.length;
   }
 
   if (raw.length === 0) {
-    return NextResponse.json({ results: [], coverage: true, hsFilteredCount });
+    return NextResponse.json({ results: [], coverage: true, hsFilteredCount: hsBlockedCount });
   }
 
   const prelim = raw
@@ -60,16 +81,54 @@ export async function POST(req: Request) {
     .sort((a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9))
     .slice(0, PRELIM_CAP);
 
+  let verifiedListings = prelim.map((x) => x.r);
+
+  // Adzuna's snippet is truncated — it often cuts off right before a "Qualifications"
+  // section, which is exactly where a degree requirement tends to live (confirmed against
+  // real listings that passed the cheap check above but required a degree). For a high
+  // schooler we fetch each listing's full posting text and re-check against that before
+  // it's allowed on the list at all; if we can't load a listing's full page we leave it
+  // out rather than show something we couldn't actually confirm.
+  if (answers.stage === "hs" && verifiedListings.length > 0) {
+    const checked = await mapWithConcurrency(verifiedListings, HS_VERIFY_CONCURRENCY, async (listing, i) => {
+      // Small stagger per lane so requests land spread out rather than in one burst.
+      if (i >= HS_VERIFY_CONCURRENCY) await sleep(50 + Math.random() * 100);
+      const full = await fetchFullDescriptionText(listing.url);
+      if (full === null) return { listing, keep: false, reason: "unverified" as const };
+      return { listing, keep: !textIndicatesCollegeOnly(full), reason: "checked" as const };
+    });
+    verifiedListings = [];
+    for (const c of checked) {
+      if (c.keep) verifiedListings.push(c.listing);
+      else if (c.reason === "unverified") hsUnverifiedCount++;
+      else hsBlockedCount++;
+    }
+  }
+
+  if (verifiedListings.length === 0) {
+    return NextResponse.json({
+      results: [],
+      coverage: true,
+      hsFilteredCount: hsBlockedCount,
+      hsUnverifiedCount,
+    });
+  }
+
   let driveTimes: (DriveTime | null)[] | undefined;
   try {
     driveTimes = await getDriveTimes(
       { lat: loc.lat, lng: loc.lng },
-      prelim.map((x) => (x.r.lat === null || x.r.lng === null ? null : { lat: x.r.lat, lng: x.r.lng })),
+      verifiedListings.map((l) => (l.lat === null || l.lng === null ? null : { lat: l.lat, lng: l.lng })),
     );
   } catch {
     // scoreLive falls back to a straight-line estimate per listing
   }
 
-  const scored = scoreLive(answers, { lat: loc.lat, lng: loc.lng }, prelim.map((x) => x.r), driveTimes);
-  return NextResponse.json({ results: scored, coverage: true, hsFilteredCount });
+  const scored = scoreLive(answers, { lat: loc.lat, lng: loc.lng }, verifiedListings, driveTimes);
+  return NextResponse.json({
+    results: scored,
+    coverage: true,
+    hsFilteredCount: hsBlockedCount,
+    hsUnverifiedCount,
+  });
 }

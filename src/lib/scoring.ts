@@ -54,9 +54,12 @@ const HS_INELIGIBLE_PATTERNS: RegExp[] = [
   /pursuing a (bachelor|master|doctoral|graduate) degree/i,
 ];
 
-export function excludesHighSchoolers(listing: RawListing): boolean {
-  const text = `${listing.title} ${listing.category} ${listing.description}`;
+export function textIndicatesCollegeOnly(text: string): boolean {
   return HS_INELIGIBLE_PATTERNS.some((re) => re.test(text));
+}
+
+export function excludesHighSchoolers(listing: RawListing): boolean {
+  return textIndicatesCollegeOnly(`${listing.title} ${listing.category} ${listing.description}`);
 }
 
 function roleFit(roles: RoleKey[], listing: RawListing): number {
