@@ -74,6 +74,22 @@ function isAnswerEmpty(q: Question, answers: Answers): boolean {
 }
 
 function draftEmail(c: ScoredListing): { subject: string; body: string } {
+  if (c.coldOutreach) {
+    return {
+      subject: `Local student interested in ${c.company}`,
+      body: `Hi ${c.company} team,
+
+My name is [Your Name], a [grade] student at [Your School]. I came across ${c.company} while looking for ${c.category.toLowerCase()} opportunities near ${c.locationLabel}, and I'd love the chance to intern, shadow, or help out — even informally, part-time, or unpaid to start.
+
+[A sentence or two on why this business specifically interests you, and any relevant skills or coursework — personalize this before sending.]
+
+Would you be open to a short conversation about whether there's any way I could help out? I'm available [your availability] and can come by in person if that's easier.
+
+Thank you for your time,
+[Your Name]
+[Your phone or email]`,
+    };
+  }
   return {
     subject: `Application: ${c.title}`,
     body: `Hi ${c.company} team,
@@ -126,7 +142,40 @@ function ContactModal({ listing, onClose }: { listing: ScoredListing; onClose: (
 
         <div className="contact-block">
           <h3>Contact</h3>
-          {listing.contactEmail ? (
+          {listing.coldOutreach ? (
+            <>
+              <p className="note" style={{ marginBottom: 8 }}>
+                {listing.company} has no posted opening — this is a business we think fits what you're looking for,
+                not a confirmed job. Reach out directly using whichever of these they have:
+              </p>
+              <p className="desc">
+                {listing.contactEmail && (
+                  <>
+                    Email: <a href={`mailto:${listing.contactEmail}`}>{listing.contactEmail}</a>
+                    <br />
+                  </>
+                )}
+                {listing.phone && (
+                  <>
+                    Phone: <a href={`tel:${listing.phone}`}>{listing.phone}</a>
+                    <br />
+                  </>
+                )}
+                {listing.websiteUrl && (
+                  <>
+                    Website:{" "}
+                    <a href={listing.websiteUrl.startsWith("http") ? listing.websiteUrl : `https://${listing.websiteUrl}`} target="_blank" rel="noopener noreferrer">
+                      {listing.websiteUrl}
+                    </a>
+                    <br />
+                  </>
+                )}
+                {!listing.contactEmail && !listing.phone && !listing.websiteUrl && (
+                  <>No phone, website, or email on file — try visiting in person or searching for {listing.company} online.</>
+                )}
+              </p>
+            </>
+          ) : listing.contactEmail ? (
             <p className="desc">
               Found in this listing: <a href={`mailto:${listing.contactEmail}`}>{listing.contactEmail}</a>
             </p>
@@ -183,25 +232,27 @@ function ResultRow({
         <h3>{c.title}</h3>
         <div className="meta">
           <Pill d={c.d} lim={lim} /> &nbsp;{c.company} · {c.locationLabel}
-          {c.hsEligibility === "unverified" && (
+          {c.coldOutreach && (
             <>
               {" "}
               <span className="pill" style={{ background: "var(--mid)" }}>
-                Not verified
+                No listed opening
               </span>
             </>
           )}
         </div>
         <p className="desc">{c.description ? `${c.description.slice(0, 220)}${c.description.length > 220 ? "…" : ""}` : ""}</p>
-        <p className="desc" style={{ color: "var(--ink-3)" }}>
-          {payLabel(c)} · {c.remoteGuess === "remote" ? "Remote" : c.remoteGuess === "hybrid" ? "Hybrid" : "In person"}
-        </p>
+        {!c.coldOutreach && (
+          <p className="desc" style={{ color: "var(--ink-3)" }}>
+            {payLabel(c)} · {c.remoteGuess === "remote" ? "Remote" : c.remoteGuess === "hybrid" ? "Hybrid" : "In person"}
+          </p>
+        )}
         <p className="why">{why(c)}</p>
       </div>
       <div className="score">
         <b>{c.s}</b>
         <span>of 100</span>
-        <span className="applyhint">{c.url ? "Apply ↗" : "Contact →"}</span>
+        <span className="applyhint">{c.url ? "Apply ↗" : c.coldOutreach ? "Pitch →" : "Contact →"}</span>
       </div>
     </>
   );
@@ -242,8 +293,8 @@ export default function HomeClient() {
   const [tab, setTab] = useState(0);
   const [results, setResults] = useState<ScoredListing[] | null>(null);
   const [coverage, setCoverage] = useState(true);
-  const [hsFilteredCount, setHsFilteredCount] = useState(0);
-  const [hsUnverifiedCount, setHsUnverifiedCount] = useState(0);
+  const [hsRadiusMiles, setHsRadiusMiles] = useState(0);
+  const [hsCity, setHsCity] = useState("");
   const [contactFor, setContactFor] = useState<ScoredListing | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -395,11 +446,10 @@ export default function HomeClient() {
     const stages =
       answers.stage === "hs"
         ? [
-            "Searching real internship listings near you…",
+            "Finding real local businesses near you…",
             "Checking real distances…",
-            "Reading each listing's full posting to confirm high schoolers are eligible…",
             "Matching against what you want to do…",
-            "Ranking your shortlist…",
+            "Drafting cold-pitch angles…",
           ]
         : [
             "Searching real internship listings near you…",
@@ -424,8 +474,8 @@ export default function HomeClient() {
       const computed: ScoredListing[] = data.results || [];
       setResults(computed);
       setCoverage(data.coverage !== false);
-      setHsFilteredCount(data.hsFilteredCount || 0);
-      setHsUnverifiedCount(data.hsUnverifiedCount || 0);
+      setHsRadiusMiles(data.hsRadiusMiles || 0);
+      setHsCity(data.hsCity || "");
       setTab(0);
       setView("res");
       if (status === "authenticated") {
@@ -674,21 +724,19 @@ export default function HomeClient() {
           <div className="res">
             <div className="reshead">
               <div>
-                <h2>Your shortlist</h2>
+                <h2>{answers.stage === "hs" ? "Businesses worth pitching" : "Your shortlist"}</h2>
                 <p className="note" style={{ marginTop: 6 }}>
-                  {coverage
-                    ? `${results.length} live listings ranked from ${answers.loc!.label}.`
-                    : `We don't have live coverage for ${answers.loc!.label} yet — coverage today is the US, UK, Canada, Australia, and about a dozen more countries, mostly in Europe.`}
+                  {answers.stage === "hs"
+                    ? `${results.length} real businesses within ${hsRadiusMiles || parseFloat(answers.max || "15")} miles of ${hsCity || answers.loc!.label}.`
+                    : coverage
+                      ? `${results.length} live listings ranked from ${answers.loc!.label}.`
+                      : `We don't have live coverage for ${answers.loc!.label} yet — coverage today is the US, UK, Canada, Australia, and about a dozen more countries, mostly in Europe.`}
                 </p>
-                {answers.stage === "hs" && (hsFilteredCount > 0 || hsUnverifiedCount > 0) && (
+                {answers.stage === "hs" && (
                   <p className="note" style={{ marginTop: 4 }}>
-                    We read the full posting behind each listing to check for a college/grad-school requirement.
-                    {hsFilteredCount > 0
-                      ? ` Hid ${hsFilteredCount} listing${hsFilteredCount === 1 ? "" : "s"} that had one.`
-                      : ""}
-                    {hsUnverifiedCount > 0
-                      ? ` ${hsUnverifiedCount} listing${hsUnverifiedCount === 1 ? "" : "s"} below couldn't be loaded to check — marked "Not verified," so look them over yourself before applying.`
-                      : ""}
+                    Real internships open to high schoolers are almost nonexistent as formal job postings, so instead
+                    of listings, these are actual nearby businesses matched to what you're interested in. None of
+                    them have a posted opening — tap one for the full pitch and a sample cold email.
                   </p>
                 )}
               </div>
@@ -754,10 +802,10 @@ export default function HomeClient() {
                 ))
               ) : (
                 <div className="empty">
-                  {!coverage
-                    ? "Try a city in a country we have live coverage for."
-                    : hsFilteredCount > 0
-                      ? "Everything we found near you required being enrolled in college or grad school — try a bigger nearby city, or check back later."
+                  {answers.stage === "hs"
+                    ? "Couldn't find nearby businesses matching this — try widening the distance on question 2, or a bigger nearby city."
+                    : !coverage
+                      ? "Try a city in a country we have live coverage for."
                       : "Nothing matched. Try widening the distance on question 2, or a bigger nearby city."}
                 </div>
               )}
@@ -768,12 +816,24 @@ export default function HomeClient() {
 
       <footer>
         <div className="wrap">
-          Listings come from a live jobs-search API and are re-fetched every time you run the questionnaire — not a
-          static dataset. Distance uses the listing&apos;s stated location, with a real driving route where we could
-          get one and a straight-line estimate otherwise. &quot;Remote / hybrid / in person&quot; and pay are read
-          from the listing text automatically and can be wrong — check the actual posting before you apply. Live
-          coverage is currently limited to a set of countries, mostly the US, UK, Canada, Australia, and Western
-          Europe.
+          {answers.stage === "hs" ? (
+            <>
+              High-school results come from OpenStreetMap&apos;s real, open business data, re-fetched every time you
+              run the questionnaire — not a static dataset. None of these businesses posted an opening; every one is
+              a suggested cold-outreach target based on distance and your stated interests, not a confirmed job.
+              Contact details (phone, website, email) are whatever that business has published publicly and may be
+              out of date — double-check before reaching out.
+            </>
+          ) : (
+            <>
+              Listings come from a live jobs-search API and are re-fetched every time you run the questionnaire — not
+              a static dataset. Distance uses the listing&apos;s stated location, with a real driving route where we
+              could get one and a straight-line estimate otherwise. &quot;Remote / hybrid / in person&quot; and pay
+              are read from the listing text automatically and can be wrong — check the actual posting before you
+              apply. Live coverage is currently limited to a set of countries, mostly the US, UK, Canada, Australia,
+              and Western Europe.
+            </>
+          )}
         </div>
       </footer>
 

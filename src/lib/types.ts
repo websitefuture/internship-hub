@@ -92,6 +92,11 @@ export interface RawListing {
   // loaded to check (Adzuna's site occasionally blocks automated fetches) — shown, not hidden,
   // but flagged so a student knows to double-check it themselves before applying.
   hsEligibility?: "confirmed" | "unverified";
+  // High-school-stage results only: this is a real local business with no known opening,
+  // suggested as a cold-outreach target (see src/lib/localBusinesses.ts), not a job listing.
+  coldOutreach?: boolean;
+  websiteUrl?: string | null;
+  phone?: string | null;
 }
 
 export type LiveScoreParts = Record<"Commute" | "Role fit" | "Pay" | "Mode", number>;
