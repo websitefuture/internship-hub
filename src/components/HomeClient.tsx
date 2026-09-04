@@ -793,7 +793,7 @@ export default function HomeClient() {
 
                 <div className="field">
                   <label htmlFor="nm">Your name</label>
-                  <input id="nm" type="text" placeholder="Jordan Lee" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+                  <input id="nm" type="text" placeholder="Your name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
                 </div>
                 <div className="field">
                   <label htmlFor="em">Email</label>
