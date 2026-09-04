@@ -86,22 +86,34 @@ export async function POST(req: Request) {
   // Adzuna's snippet is truncated — it often cuts off right before a "Qualifications"
   // section, which is exactly where a degree requirement tends to live (confirmed against
   // real listings that passed the cheap check above but required a degree). For a high
-  // schooler we fetch each listing's full posting text and re-check against that before
-  // it's allowed on the list at all; if we can't load a listing's full page we leave it
-  // out rather than show something we couldn't actually confirm.
+  // schooler we fetch each listing's full posting text and re-check against that.
+  //
+  // Adzuna's site blocks a meaningful share of automated fetches for its full pages —
+  // confirmed this isn't about request volume or headers (still happens at low, staggered
+  // concurrency with browser-like headers, from both this dev machine and the deployed
+  // server's own IP), so it's not something we can reliably code around without doing
+  // something closer to impersonating a real browser, which isn't the right move here.
+  // Listings we DO confirm are marked "confirmed"; ones we can't load are kept but marked
+  // "unverified" and flagged in the UI, rather than either hiding them (too few results
+  // left to be useful) or showing them as if they were checked (dishonest either way).
   if (answers.stage === "hs" && verifiedListings.length > 0) {
     const checked = await mapWithConcurrency(verifiedListings, HS_VERIFY_CONCURRENCY, async (listing, i) => {
       // Small stagger per lane so requests land spread out rather than in one burst.
       if (i >= HS_VERIFY_CONCURRENCY) await sleep(50 + Math.random() * 100);
       const full = await fetchFullDescriptionText(listing.url);
-      if (full === null) return { listing, keep: false, reason: "unverified" as const };
+      if (full === null) return { listing, keep: true, reason: "unverified" as const };
       return { listing, keep: !textIndicatesCollegeOnly(full), reason: "checked" as const };
     });
     verifiedListings = [];
     for (const c of checked) {
-      if (c.keep) verifiedListings.push(c.listing);
-      else if (c.reason === "unverified") hsUnverifiedCount++;
-      else hsBlockedCount++;
+      if (c.reason === "unverified") {
+        hsUnverifiedCount++;
+        verifiedListings.push({ ...c.listing, hsEligibility: "unverified" });
+      } else if (c.keep) {
+        verifiedListings.push({ ...c.listing, hsEligibility: "confirmed" });
+      } else {
+        hsBlockedCount++;
+      }
     }
   }
 

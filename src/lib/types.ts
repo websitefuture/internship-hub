@@ -87,6 +87,11 @@ export interface RawListing {
   remoteGuess: "remote" | "hybrid" | "onsite";
   unpaidMentioned: boolean;
   contactEmail: string | null; // pulled from the listing text itself, when a listing includes one
+  // Only set for high-school-stage searches: "confirmed" means the full posting was fetched
+  // and doesn't require college/grad enrollment; "unverified" means the full page couldn't be
+  // loaded to check (Adzuna's site occasionally blocks automated fetches) — shown, not hidden,
+  // but flagged so a student knows to double-check it themselves before applying.
+  hsEligibility?: "confirmed" | "unverified";
 }
 
 export type LiveScoreParts = Record<"Commute" | "Role fit" | "Pay" | "Mode", number>;

@@ -183,6 +183,14 @@ function ResultRow({
         <h3>{c.title}</h3>
         <div className="meta">
           <Pill d={c.d} lim={lim} /> &nbsp;{c.company} · {c.locationLabel}
+          {c.hsEligibility === "unverified" && (
+            <>
+              {" "}
+              <span className="pill" style={{ background: "var(--mid)" }}>
+                Not verified
+              </span>
+            </>
+          )}
         </div>
         <p className="desc">{c.description ? `${c.description.slice(0, 220)}${c.description.length > 220 ? "…" : ""}` : ""}</p>
         <p className="desc" style={{ color: "var(--ink-3)" }}>
@@ -674,13 +682,12 @@ export default function HomeClient() {
                 </p>
                 {answers.stage === "hs" && (hsFilteredCount > 0 || hsUnverifiedCount > 0) && (
                   <p className="note" style={{ marginTop: 4 }}>
-                    We read the full posting behind every listing here and confirmed none of them require being
-                    enrolled in college or grad school.
+                    We read the full posting behind each listing to check for a college/grad-school requirement.
                     {hsFilteredCount > 0
-                      ? ` Hid ${hsFilteredCount} listing${hsFilteredCount === 1 ? "" : "s"} that did.`
+                      ? ` Hid ${hsFilteredCount} listing${hsFilteredCount === 1 ? "" : "s"} that had one.`
                       : ""}
                     {hsUnverifiedCount > 0
-                      ? ` Left out ${hsUnverifiedCount} more we couldn't load to check.`
+                      ? ` ${hsUnverifiedCount} listing${hsUnverifiedCount === 1 ? "" : "s"} below couldn't be loaded to check — marked "Not verified," so look them over yourself before applying.`
                       : ""}
                   </p>
                 )}
@@ -749,8 +756,8 @@ export default function HomeClient() {
                 <div className="empty">
                   {!coverage
                     ? "Try a city in a country we have live coverage for."
-                    : hsFilteredCount > 0 || hsUnverifiedCount > 0
-                      ? "Everything we found near you either required being enrolled in college or grad school, or we couldn't load the full posting to check — try a bigger nearby city, or check back later."
+                    : hsFilteredCount > 0
+                      ? "Everything we found near you required being enrolled in college or grad school — try a bigger nearby city, or check back later."
                       : "Nothing matched. Try widening the distance on question 2, or a bigger nearby city."}
                 </div>
               )}
