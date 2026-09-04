@@ -36,7 +36,7 @@ export default function Dial({ list, size }: DialProps) {
       const x = cx + r * Math.cos(th) + j[0];
       const y = cy + r * Math.sin(th) + j[1];
       const lim = c.lim || 15;
-      const col = c.d! <= lim ? "#FF4D1C" : c.d! <= lim * 2 ? "#9AA397" : "#D3D6CE";
+      const col = c.d! <= lim ? "#FF4D1C" : c.d! <= lim * 2 ? "#8B948C" : "#454B46";
       return { key: `${c.label}-${i}`, label: c.label, x, y, col, top: c.top, d: c.d! };
     });
 
@@ -49,7 +49,15 @@ export default function Dial({ list, size }: DialProps) {
       aria-label="Companies plotted by distance and direction from your location"
     >
       {bands.map((b) => (
-        <circle key={b} cx={cx} cy={cy} r={rr(b).toFixed(1)} fill="none" stroke="#DCE3DF" strokeWidth={1} />
+        <circle
+          key={b}
+          cx={cx}
+          cy={cy}
+          r={rr(b).toFixed(1)}
+          fill="none"
+          stroke="rgba(255,255,255,0.14)"
+          strokeWidth={1}
+        />
       ))}
       {bands.map((b) => (
         <text
@@ -57,14 +65,14 @@ export default function Dial({ list, size }: DialProps) {
           x={cx + 2}
           y={cy - rr(b) + 11}
           fontSize={9.5}
-          fill="#9AA8A3"
+          fill="rgba(255,255,255,0.45)"
           fontFamily="Instrument Sans"
         >
           {b}mi
         </text>
       ))}
-      <line x1={cx} y1={14} x2={cx} y2={size - 14} stroke="#EDF1EE" />
-      <line x1={14} y1={cy} x2={size - 14} y2={cy} stroke="#EDF1EE" />
+      <line x1={cx} y1={14} x2={cx} y2={size - 14} stroke="rgba(255,255,255,0.08)" />
+      <line x1={14} y1={cy} x2={size - 14} y2={cy} stroke="rgba(255,255,255,0.08)" />
       {points.map((p) => (
         <circle
           key={p.key}
@@ -77,8 +85,8 @@ export default function Dial({ list, size }: DialProps) {
           <title>{`${p.label} — ${Math.round(p.d)} mi`}</title>
         </circle>
       ))}
-      <circle cx={cx} cy={cy} r={4.5} fill="#0B0F0D" />
-      <circle cx={cx} cy={cy} r={9} fill="none" stroke="#0B0F0D" strokeWidth={1} opacity={0.3} />
+      <circle cx={cx} cy={cy} r={4.5} fill="#F5F7F3" />
+      <circle cx={cx} cy={cy} r={9} fill="none" stroke="#F5F7F3" strokeWidth={1} opacity={0.3} />
     </svg>
   );
 }

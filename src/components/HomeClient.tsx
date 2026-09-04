@@ -611,11 +611,11 @@ export default function HomeClient() {
         <div className="wrap">
           <button className="brand" onClick={() => go("landing")} aria-label="Internship Hub home">
             <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
-              <circle cx="11" cy="11" r="9.5" fill="none" stroke="#DCE3DF" strokeWidth="1" />
-              <circle cx="11" cy="11" r="5.5" fill="none" stroke="#DCE3DF" strokeWidth="1" />
-              <circle cx="11" cy="11" r="2" fill="#101F1B" />
-              <circle cx="17.4" cy="6.6" r="2" fill="#9E2B3E" />
-              <circle cx="6.2" cy="14.4" r="2" fill="#0E7C66" />
+              <circle cx="11" cy="11" r="9.5" fill="none" stroke="var(--line)" strokeWidth="1" />
+              <circle cx="11" cy="11" r="5.5" fill="none" stroke="var(--line)" strokeWidth="1" />
+              <circle cx="11" cy="11" r="2" fill="var(--ink)" />
+              <circle cx="17.4" cy="6.6" r="2" fill="var(--accent)" />
+              <circle cx="6.2" cy="14.4" r="2" fill="var(--lime)" />
             </svg>
             Internship Hub
           </button>
@@ -666,9 +666,9 @@ export default function HomeClient() {
             <div className="hero-mockup-wrap">
               <div className="mockup-card" aria-hidden="true">
                 <div className="mockup-titlebar">
-                  <span className="mockup-dot" style={{ background: "#e6b4ab" }} />
-                  <span className="mockup-dot" style={{ background: "#eed7a3" }} />
-                  <span className="mockup-dot" style={{ background: "#b7dcc7" }} />
+                  <span className="mockup-dot" style={{ background: "#ff8577" }} />
+                  <span className="mockup-dot" style={{ background: "#ffcf6b" }} />
+                  <span className="mockup-dot" style={{ background: "#7ee2a8" }} />
                   <span className="mockup-titletext">Your shortlist</span>
                 </div>
                 <div className="mockup-body">
