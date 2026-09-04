@@ -300,12 +300,11 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
           <section className="hero">
             <div className="hero-text">
               <div className="kicker">For students looking for their first internship</div>
-              <h1>Most internship lists ignore the only thing you can&apos;t change.</h1>
-              <p className="lede">
-                You can learn a new skill. You can rewrite your resume. You cannot move a company closer to your
-                house, and at sixteen you probably can&apos;t drive to it either. Internship Hub ranks startups by
-                how far they actually are from you, then by everything else.
-              </p>
+              <h1>
+                Internships you can
+                <br />
+                actually <span className="accent-text">get to.</span>
+              </h1>
               <button className="btn" onClick={() => setView(user ? "q" : "auth")}>
                 Get started
               </button>

@@ -4,13 +4,15 @@
   --ink: #101f1b;
   --ink-2: #3a4b46;
   --ink-3: #6b7c77;
-  --paper: #f4f6f4;
+  --paper: #faf3ea;
   --card: #ffffff;
-  --line: #dce3df;
-  --line-2: #edf1ee;
+  --line: #ecdfcd;
+  --line-2: #f3ead9;
   --near: #0e7c66;
   --mid: #b87503;
   --far: #9e2b3e;
+  --accent: #dd6b20;
+  --accent-2: #b8551a;
   --focus: #0e7c66;
   --r: 10px;
 }
@@ -23,7 +25,10 @@ body {
   padding: 0;
 }
 body {
-  background: var(--paper);
+  background:
+    radial-gradient(ellipse 900px 500px at 8% -8%, #ffe0c2 0%, transparent 60%),
+    radial-gradient(ellipse 900px 600px at 100% 10%, #fff3e0 0%, transparent 55%),
+    var(--paper);
   color: var(--ink);
   font-family: var(--font-instrument-sans), system-ui, -apple-system, sans-serif;
   font-size: 16px;
@@ -44,9 +49,12 @@ h3 {
   line-height: 1.12;
 }
 h1 {
-  font-size: clamp(34px, 4.6vw, 56px);
-  font-weight: 700;
-  letter-spacing: -0.035em;
+  font-size: clamp(42px, 5.6vw, 68px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+.accent-text {
+  color: var(--accent);
 }
 h2 {
   font-size: clamp(24px, 3.4vw, 32px);
@@ -121,19 +129,21 @@ header.bar {
 
 /* ---------- buttons ---------- */
 .btn {
-  border: 1px solid var(--ink);
-  background: var(--ink);
+  border: 1px solid var(--accent);
+  background: var(--accent);
   color: #fff;
-  padding: 12px 22px;
-  border-radius: var(--r);
-  font-weight: 600;
+  padding: 18px 34px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 17px;
   letter-spacing: -0.01em;
   transition:
     transform 0.12s ease,
     background 0.12s ease;
 }
 .btn:hover {
-  background: #0a1614;
+  background: var(--accent-2);
+  border-color: var(--accent-2);
 }
 .btn:active {
   transform: translateY(1px);
@@ -154,6 +164,18 @@ header.bar {
   padding: 8px 15px;
   font-size: 14px;
   border-radius: 8px;
+}
+.q .btn,
+.geo .btn {
+  padding: 12px 22px;
+  font-size: 16px;
+  border-radius: var(--r);
+}
+.q .btn.ghost,
+.geo .btn.ghost {
+  background: transparent;
+  color: var(--ink);
+  border-color: var(--line);
 }
 
 /* ---------- landing ---------- */
@@ -180,7 +202,7 @@ header.bar {
   margin-top: 20px;
 }
 .hero .btn {
-  margin-top: 8px;
+  margin-top: 28px;
 }
 .dial-wrap {
   display: flex;
