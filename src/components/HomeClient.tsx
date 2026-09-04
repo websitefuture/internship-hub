@@ -610,12 +610,15 @@ export default function HomeClient() {
       <header className="bar">
         <div className="wrap">
           <button className="brand" onClick={() => go("landing")} aria-label="Internship Hub home">
-            <svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true">
-              <circle cx="11" cy="11" r="9.5" fill="none" stroke="var(--line)" strokeWidth="1" />
-              <circle cx="11" cy="11" r="5.5" fill="none" stroke="var(--line)" strokeWidth="1" />
-              <circle cx="11" cy="11" r="2" fill="var(--ink)" />
-              <circle cx="17.4" cy="6.6" r="2" fill="var(--accent)" />
-              <circle cx="6.2" cy="14.4" r="2" fill="var(--lime)" />
+            {/* A location pin, not an abstract mark — the whole product is "find internships
+                near you," so the logo doubles as a tiny map pin with a glowing waypoint. */}
+            <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 2C7.86 2 4.5 5.36 4.5 9.5c0 5.25 6.18 11.28 6.98 12.02a.78.78 0 0 0 1.04 0C13.32 20.78 19.5 14.75 19.5 9.5 19.5 5.36 16.14 2 12 2z"
+                fill="var(--accent)"
+              />
+              <circle cx="12" cy="9.5" r="3.3" fill="var(--paper)" />
+              <circle cx="12" cy="9.5" r="1.4" fill="var(--lime)" />
             </svg>
             Internship Hub
           </button>
