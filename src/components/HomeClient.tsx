@@ -7,7 +7,7 @@ import { bearing, miles } from "@/lib/geo";
 import { CITIES, QUESTIONS } from "@/lib/questions";
 import { score } from "@/lib/scoring";
 import { load, save } from "@/lib/storage";
-import type { Answers, Company, PlottedCompany, ScoredCompany, UserProfile } from "@/lib/types";
+import type { Answers, Company, DriveTime, PlottedCompany, ScoredCompany, UserProfile } from "@/lib/types";
 
 type View = "landing" | "auth" | "q" | "res";
 
@@ -70,6 +70,7 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
   const [email, setEmail] = useState("");
   const [locMsg, setLocMsg] = useState<{ text: string; err?: boolean } | null>(null);
   const [geoBusy, setGeoBusy] = useState(false);
+  const [computing, setComputing] = useState(false);
   const [dialSize, setDialSize] = useState(400);
   const [resDialSize, setResDialSize] = useState(360);
 
@@ -180,7 +181,7 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
     setLocMsg({ text: `Using ${c[0]}. City centre.` });
   }
 
-  function goNext() {
+  async function goNext() {
     const q = currentQ;
     const v = answers[q.k];
     const empty = q.type === "loc" ? !v : q.type === "many" ? !(Array.isArray(v) && v.length) : !v;
@@ -191,23 +192,42 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
     setQHint("");
     if (qIndex < QUESTIONS.length - 1) {
       setQIndex((i) => i + 1);
+      return;
+    }
+
+    const loc = answers.loc!;
+    const finalUser: UserProfile = { ...user!, lat: loc.lat, lng: loc.lng };
+    setUser(finalUser);
+    setComputing(true);
+
+    let driveTimes: (DriveTime | null)[] | undefined;
+    try {
+      const res = await fetch("/api/drive-times", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          origin: { lat: loc.lat, lng: loc.lng },
+          destinations: companies.map((c) => (c.lat === null ? null : { lat: c.lat, lng: c.lng })),
+        }),
+      });
+      if (res.ok) driveTimes = (await res.json()).times;
+    } catch {
+      // routing unavailable — score() falls back to a straight-line estimate per company
+    }
+
+    const computed = score(answers, finalUser, companies, driveTimes);
+    setResults(computed);
+    setTab(0);
+    setView("res");
+    setComputing(false);
+    if (status === "authenticated") {
+      fetch("/api/user-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers, results: computed }),
+      }).catch(() => {});
     } else {
-      const loc = answers.loc!;
-      const finalUser: UserProfile = { ...user!, lat: loc.lat, lng: loc.lng };
-      setUser(finalUser);
-      const computed = score(answers, finalUser, companies);
-      setResults(computed);
-      setTab(0);
-      setView("res");
-      if (status === "authenticated") {
-        fetch("/api/user-data", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers, results: computed }),
-        }).catch(() => {});
-      } else {
-        save("answers", answers);
-      }
+      save("answers", answers);
     }
   }
 
@@ -414,11 +434,11 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
             )}
 
             <div className="nav">
-              <button className="btn ghost" style={{ visibility: qIndex === 0 ? "hidden" : "visible" }} onClick={goBack}>
+              <button className="btn ghost" style={{ visibility: qIndex === 0 ? "hidden" : "visible" }} onClick={goBack} disabled={computing}>
                 Back
               </button>
-              <button className="btn" onClick={goNext}>
-                {qIndex === QUESTIONS.length - 1 ? "See my shortlist" : "Next"}
+              <button className="btn" onClick={goNext} disabled={computing}>
+                {computing ? "Finding real drive times…" : qIndex === QUESTIONS.length - 1 ? "See my shortlist" : "Next"}
               </button>
               <span className="note">{qHint}</span>
             </div>
@@ -514,9 +534,10 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
 
       <footer>
         <div className="wrap">
-          Company data compiled September 2026 and not re-verified since. Distances are straight-line estimates
-          between city centres, not driving routes. Check that a company still exists and that the contact still
-          works there before you email them.
+          Company data compiled September 2026 and not re-verified since. Distances are real driving routes, but to
+          each company&apos;s city centre rather than its exact street address — companies in the same city will
+          show the same distance. Transit time is estimated from drive time, not a real transit route. Check that a
+          company still exists and that the contact still works there before you email them.
         </div>
       </footer>
     </>

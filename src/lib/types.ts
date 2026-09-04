@@ -61,6 +61,11 @@ export interface PlottedCompany extends ScoredCompany {
   top?: boolean;
 }
 
+export interface DriveTime {
+  minutes: number | null;
+  miles: number | null;
+}
+
 export type QuestionOption = [value: string, label: string, sub: string];
 
 export interface Question {

@@ -1,5 +1,5 @@
 import { miles } from "./geo";
-import type { Answers, Company, RoleKey, ScoredCompany, ScoreParts, UserProfile } from "./types";
+import type { Answers, Company, DriveTime, RoleKey, ScoredCompany, ScoreParts, UserProfile } from "./types";
 
 function roleFit(role: RoleKey, co: Company): number {
   const i = (co.i || "").toLowerCase();
@@ -46,7 +46,28 @@ const BASE: Record<"commute" | "fit" | "size" | "growth" | "reach" | "hs", numbe
   hs: 5,
 };
 
-export function score(answers: Answers, user: UserProfile, companies: Company[]): ScoredCompany[] {
+// Bay Area arterial-road assumption used only as a fallback when live routing
+// is unavailable for a company (e.g. OSRM request failed) — real drive time
+// from getDriveTimes() is used whenever we have it.
+const FALLBACK_MPH = 24;
+
+// Typical ratio of Bay Area transit time to driving time for a suburban/exurban
+// trip (buses and light rail rarely run point-to-point) — documented estimate,
+// not measured, because there is no free transit-routing API to call instead.
+const TRANSIT_VS_DRIVE_MULTIPLIER = 2.3;
+
+// A company where the user's chosen role(s) have essentially nothing to do
+// there shouldn't outrank a genuinely relevant one just for being close —
+// this scales continuously with role fit instead of a fixed-percentage cutoff.
+const RELEVANCE_FLOOR_THRESHOLD = 0.4;
+const RELEVANCE_FLOOR_MIN = 0.5;
+
+export function score(
+  answers: Answers,
+  user: UserProfile,
+  companies: Company[],
+  driveTimes?: (DriveTime | null)[],
+): ScoredCompany[] {
   const a = answers;
   const w = { ...BASE };
   (a.pri || []).forEach((p) => {
@@ -57,27 +78,46 @@ export function score(answers: Answers, user: UserProfile, companies: Company[])
     w[k] = (w[k] / totalWeight) * 100;
   });
 
+  // The question asks for a distance preference, but the real signal is time —
+  // this converts miles to a time budget assuming FALLBACK_MPH average speed.
   const maxMiles = parseFloat(a.max || "30");
-  const factor = { drive: 1, driven: 0.8, transit: 0.45, none: 0 }[a.how || "drive"];
-  const effMax = Math.max(2, maxMiles * factor);
+  const baseTimeBudget = Math.max(4, (maxMiles / FALLBACK_MPH) * 60);
+  const how = a.how || "drive";
   const roles: RoleKey[] = a.role && a.role.length ? a.role : ["marketing"];
 
   const userLat = user.lat!;
   const userLng = user.lng!;
 
-  const out: ScoredCompany[] = companies.map((co) => {
+  const out: ScoredCompany[] = companies.map((co, i) => {
     const remote = co.lat === null;
+    const dt = driveTimes?.[i];
     let d: number | null = null;
     let cs: number;
+
     if (remote) {
       cs = a.mode === "remote" ? 0.95 : a.mode === "hybrid" ? 0.6 : 0.2;
-    } else if (a.how === "none" || a.mode === "remote") {
+    } else if (how === "none" || a.mode === "remote") {
       cs = 0.15;
-      d = miles(userLat, userLng, co.lat!, co.lng!);
+      d = dt?.miles ?? miles(userLat, userLng, co.lat!, co.lng!);
     } else {
-      d = miles(userLat, userLng, co.lat!, co.lng!);
-      cs = d <= effMax ? 1 - 0.5 * (d / effMax) : Math.max(0, 0.5 - (d - effMax) / 55);
+      const driveMinutes = dt?.minutes ?? (miles(userLat, userLng, co.lat!, co.lng!) / FALLBACK_MPH) * 60;
+      d = dt?.miles ?? miles(userLat, userLng, co.lat!, co.lng!);
+
+      let t: number;
+      let budget: number;
+      if (how === "driven") {
+        t = driveMinutes;
+        budget = baseTimeBudget * 0.75; // asking someone else for a ride has a lower tolerance
+      } else if (how === "transit") {
+        t = driveMinutes * TRANSIT_VS_DRIVE_MULTIPLIER;
+        budget = baseTimeBudget;
+      } else {
+        t = driveMinutes;
+        budget = baseTimeBudget;
+      }
+      cs = t <= budget ? 1 - 0.5 * (t / budget) : Math.max(0, 0.5 - (t - budget) / budget);
     }
+
     const fit = Math.max(...roles.map((r) => roleFit(r, co)));
     const sz = sizeFit(a.size || "any", co.e);
     const gr = co.g / 15;
@@ -85,9 +125,11 @@ export function score(answers: Answers, user: UserProfile, companies: Company[])
     const hs = co.hs ? (a.stage === "hs" ? 1 : 0.4) : 0;
     let s = w.commute * cs + w.fit * fit + w.size * sz + w.growth * gr + w.reach * re + w.hs * hs;
 
-    const wantsMkt = roles.includes("marketing") || roles.includes("design");
-    const techOnly = roles.every((r) => r === "eng" || r === "data");
-    if (co.m <= 8 && wantsMkt && !techOnly) s = Math.min(s, Math.round(s * 0.78));
+    const relevancePenalty =
+      fit < RELEVANCE_FLOOR_THRESHOLD
+        ? RELEVANCE_FLOOR_MIN + (fit / RELEVANCE_FLOOR_THRESHOLD) * (1 - RELEVANCE_FLOOR_MIN)
+        : 1;
+    s = s * relevancePenalty;
 
     const parts: ScoreParts = { Commute: cs, "Role fit": fit, "Team size": sz, Growth: gr, Reach: re };
     const entries = Object.entries(parts) as [keyof ScoreParts, number][];
