@@ -1,6 +1,5 @@
 @import "tailwindcss";
 
-/* Ported as-is from radius.html — same design tokens, same rules. No design changes yet. */
 :root {
   --ink: #101f1b;
   --ink-2: #3a4b46;
@@ -32,7 +31,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 .wrap {
-  max-width: 880px;
+  max-width: 1080px;
   margin: 0 auto;
   padding: 0 24px;
 }
@@ -45,7 +44,7 @@ h3 {
   line-height: 1.12;
 }
 h1 {
-  font-size: clamp(38px, 6vw, 62px);
+  font-size: clamp(34px, 4.6vw, 56px);
   font-weight: 700;
   letter-spacing: -0.035em;
 }
@@ -159,7 +158,14 @@ header.bar {
 
 /* ---------- landing ---------- */
 .hero {
-  padding: 76px 0 8px;
+  padding: 64px 0 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 420px);
+  gap: 48px;
+  align-items: center;
+}
+.hero-text {
+  min-width: 0;
 }
 .kicker {
   color: var(--near);
@@ -170,13 +176,30 @@ header.bar {
 .hero p.lede {
   font-size: 19px;
   color: var(--ink-2);
-  max-width: 56ch;
+  max-width: 52ch;
   margin-top: 20px;
+}
+.hero .btn {
+  margin-top: 8px;
 }
 .dial-wrap {
   display: flex;
-  justify-content: flex-start;
-  padding: 30px 0 10px;
+  justify-content: center;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 18px;
+}
+@media (max-width: 860px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .dial-wrap {
+    order: -1;
+    margin-bottom: 8px;
+    padding: 14px;
+  }
 }
 .dialrow {
   display: flex;
@@ -185,64 +208,81 @@ header.bar {
   padding: 26px 0 6px;
   flex-wrap: wrap;
 }
-.stat {
-  border-left: 2px solid var(--line);
-  padding: 2px 0 2px 14px;
-  margin-bottom: 16px;
-  max-width: 34ch;
+
+/* distance breakdown bar (results) */
+.distbar-wrap {
+  margin: 28px 0 8px;
 }
-.stat b {
-  display: block;
-  font-size: 30px;
+.distbar {
+  display: flex;
+  height: 10px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--line);
+}
+.distbar span {
+  height: 100%;
+  transition: flex-basis 0.2s ease;
+}
+.distbar-key {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.distbar-key div {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+}
+.distbar-key b {
+  font-size: 21px;
   font-weight: 700;
-  letter-spacing: -0.03em;
-  line-height: 1.05;
+  letter-spacing: -0.02em;
 }
-.stat span {
-  font-size: 13.5px;
+.distbar-key span {
+  font-size: 13px;
   color: var(--ink-3);
-}
-.stat.near {
-  border-left-color: var(--near);
-}
-.stat.mid {
-  border-left-color: var(--mid);
-}
-.stat.far {
-  border-left-color: var(--far);
 }
 .readout {
   font-size: 14.5px;
   color: var(--ink-2);
-  max-width: 36ch;
-  margin-top: 4px;
+  max-width: 46ch;
+  margin-top: 14px;
 }
-.landing-grid {
+
+.fact-list {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 1px;
-  background: var(--line);
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  overflow: hidden;
-  margin: 44px 0 76px;
+  margin: 52px 0 76px;
+  border-top: 1px solid var(--line);
+  padding-top: 24px;
 }
-.landing-grid div {
-  background: var(--card);
-  padding: 20px;
+.fact-list div {
+  padding: 0 24px;
+  border-left: 1px solid var(--line);
 }
-.landing-grid h3 {
-  font-size: 15px;
+.fact-list div:first-child {
+  padding-left: 0;
+  border-left: none;
+}
+.fact-list h3 {
+  font-size: 14px;
   margin-bottom: 6px;
 }
-.landing-grid p {
+.fact-list p {
   font-size: 14px;
   color: var(--ink-3);
   margin: 0;
 }
 @media (max-width: 680px) {
-  .landing-grid {
+  .fact-list {
     grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .fact-list div {
+    padding: 0 0 0 14px;
+    border-left: 2px solid var(--line);
   }
 }
 
@@ -502,9 +542,19 @@ input:focus {
   align-items: start;
   background: var(--card);
   border: 1px solid var(--line);
+  border-left: 3px solid var(--line);
   border-radius: var(--r);
   padding: 16px 18px;
   margin-bottom: 9px;
+}
+.row.band-near {
+  border-left-color: var(--near);
+}
+.row.band-mid {
+  border-left-color: var(--mid);
+}
+.row.band-far {
+  border-left-color: var(--far);
 }
 .rank {
   font-weight: 700;
@@ -536,7 +586,12 @@ input:focus {
 }
 .row.lead {
   padding: 22px 24px;
-  border-color: var(--ink-3);
+  border-top-color: var(--ink-3);
+  border-right-color: var(--ink-3);
+  border-bottom-color: var(--ink-3);
+}
+.row.lead:not(.band-near):not(.band-mid):not(.band-far) {
+  border-left-color: var(--ink-3);
 }
 .row.lead h3 {
   font-size: 22px;

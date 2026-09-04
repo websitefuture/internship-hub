@@ -32,6 +32,11 @@ function why(c: ScoredCompany): string {
   return c.best[1] - c.worst[1] < 0.25 ? `Solid on everything: ${s}.` : `Ranks here because ${s}, despite ${w}.`;
 }
 
+function band(d: number | null, lim: number): "near" | "mid" | "far" | null {
+  if (d === null || d === undefined) return null;
+  return d <= lim ? "near" : d <= lim * 2 ? "mid" : "far";
+}
+
 function Pill({ d, lim }: { d: number | null; lim: number }) {
   if (d === null || d === undefined) return <span className="pill" style={{ background: "#3A4B46" }}>Remote</span>;
   const col = d <= lim ? "var(--near)" : d <= lim * 2 ? "var(--mid)" : "var(--far)";
@@ -71,12 +76,12 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
   const [locMsg, setLocMsg] = useState<{ text: string; err?: boolean } | null>(null);
   const [geoBusy, setGeoBusy] = useState(false);
   const [computing, setComputing] = useState(false);
-  const [dialSize, setDialSize] = useState(400);
+  const [dialSize, setDialSize] = useState(360);
   const [resDialSize, setResDialSize] = useState(360);
 
   useEffect(() => {
     const resize = () => {
-      setDialSize(Math.max(200, Math.min(400, window.innerWidth - 70)));
+      setDialSize(Math.max(200, Math.min(360, window.innerWidth - 70)));
       setResDialSize(Math.max(200, Math.min(360, window.innerWidth - 70)));
     };
     resize();
@@ -87,18 +92,23 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
   useEffect(() => {
     if (status === "loading") return;
     if (status === "authenticated" && session.user) {
-      setUser((prev) => ({ name: session.user!.name ?? "You", email: session.user!.email ?? "", lat: prev?.lat, lng: prev?.lng }));
+      const sessionUser = session.user;
+      const syncUser = () =>
+        setUser((prev) => ({ name: sessionUser.name ?? "You", email: sessionUser.email ?? "", lat: prev?.lat, lng: prev?.lng }));
       fetch("/api/user-data")
         .then((r) => r.json())
         .then((data) => {
+          syncUser();
           if (data.answers) setAnswers(data.answers);
         })
-        .catch(() => {});
+        .catch(syncUser);
     } else {
-      const p = load<UserProfile>("profile");
-      if (p) setUser(p);
-      const a = load<Answers>("answers");
-      if (a) setAnswers(a);
+      Promise.resolve().then(() => {
+        const p = load<UserProfile>("profile");
+        if (p) setUser(p);
+        const a = load<Answers>("answers");
+        if (a) setAnswers(a);
+      });
     }
   }, [status, session]);
 
@@ -252,7 +262,7 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
 
   const sortedList = useMemo(() => {
     if (!results) return [];
-    let list = [...results];
+    const list = [...results];
     if (tab === 1) list.sort((a, b) => (a.d === null ? 1e9 : a.d) - (b.d === null ? 1e9 : b.d));
     if (tab === 2) list.sort((a, b) => b.x - a.x || b.s - a.s);
     return list.slice(0, 30);
@@ -288,22 +298,24 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
       {view === "landing" && (
         <main className="wrap">
           <section className="hero">
-            <div className="kicker">For students looking for their first internship</div>
-            <h1>Most internship lists ignore the only thing you can&apos;t change.</h1>
-            <p className="lede">
-              You can learn a new skill. You can rewrite your resume. You cannot move a company closer to your
-              house, and at sixteen you probably can&apos;t drive to it either. Internship Hub ranks startups by how far
-              they actually are from you, then by everything else.
-            </p>
+            <div className="hero-text">
+              <div className="kicker">For students looking for their first internship</div>
+              <h1>Most internship lists ignore the only thing you can&apos;t change.</h1>
+              <p className="lede">
+                You can learn a new skill. You can rewrite your resume. You cannot move a company closer to your
+                house, and at sixteen you probably can&apos;t drive to it either. Internship Hub ranks startups by
+                how far they actually are from you, then by everything else.
+              </p>
+              <button className="btn" onClick={() => setView(user ? "q" : "auth")}>
+                Get started
+              </button>
+            </div>
             <div className="dial-wrap">
               <Dial list={heroDial} size={dialSize} />
             </div>
-            <button className="btn" onClick={() => setView(user ? "q" : "auth")}>
-              Get started
-            </button>
           </section>
 
-          <div className="landing-grid">
+          <div className="fact-list">
             <div>
               <h3>Ten questions</h3>
               <p>Where you are, how far you&apos;ll go, how you get there, and what you want to do. Two minutes.</p>
@@ -501,8 +513,13 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
 
             <div className="list">
               {sortedList.length ? (
-                sortedList.map((c, i) => (
-                  <div key={c.n} className={`row${i < 3 && tab === 0 ? " lead" : ""}`}>
+                sortedList.map((c, i) => {
+                  const b = band(c.d, parseFloat(answers.max || "30"));
+                  return (
+                  <div
+                    key={c.n}
+                    className={`row${i < 3 && tab === 0 ? " lead" : ""}${b ? ` band-${b}` : ""}`}
+                  >
                     <div className="rank">{i + 1}</div>
                     <div>
                       <h3>{c.n}</h3>
@@ -523,7 +540,8 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
                       <span>of 100</span>
                     </div>
                   </div>
-                ))
+                  );
+                })
               ) : (
                 <div className="empty">Nothing matched. Try widening the distance on question 2.</div>
               )}
@@ -549,26 +567,34 @@ function ResultsStats({ results, lim }: { results: ScoredCompany[]; lim: number 
   const mid = results.filter((c) => c.d !== null && c.d > lim && c.d <= lim * 2).length;
   const far = results.filter((c) => c.d !== null && c.d > lim * 2).length;
   const rem = results.filter((c) => c.d === null).length;
+  const total = Math.max(1, near + mid + far);
   const cityCounts: Record<string, number> = {};
   results.forEach((c) => {
     if (c.d !== null && c.d > lim * 2) cityCounts[c.c] = (cityCounts[c.c] || 0) + 1;
   });
   const bigCity = Object.entries(cityCounts).sort((a, b) => b[1] - a[1])[0];
   return (
-    <div>
-      <div className="stat near">
-        <b>{near}</b>
-        <span>within {lim} miles of you</span>
+    <div className="distbar-wrap">
+      <div className="distbar">
+        <span style={{ flexBasis: `${(near / total) * 100}%`, background: "var(--near)" }} />
+        <span style={{ flexBasis: `${(mid / total) * 100}%`, background: "var(--mid)" }} />
+        <span style={{ flexBasis: `${(far / total) * 100}%`, background: "var(--far)" }} />
       </div>
-      <div className="stat mid">
-        <b>{mid}</b>
-        <span>
-          a stretch, {lim} to {lim * 2} miles
-        </span>
-      </div>
-      <div className="stat far">
-        <b>{far}</b>
-        <span>too far for a regular commute</span>
+      <div className="distbar-key">
+        <div>
+          <b>{near}</b>
+          <span>within {lim} miles</span>
+        </div>
+        <div>
+          <b>{mid}</b>
+          <span>
+            a stretch, {lim}–{lim * 2} miles
+          </span>
+        </div>
+        <div>
+          <b>{far}</b>
+          <span>too far to commute</span>
+        </div>
       </div>
       {bigCity && (
         <p className="readout">
