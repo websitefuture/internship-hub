@@ -36,7 +36,7 @@ export default function Dial({ list, size }: DialProps) {
       const x = cx + r * Math.cos(th) + j[0];
       const y = cy + r * Math.sin(th) + j[1];
       const lim = c.lim || 15;
-      const col = c.d! <= lim ? "#0E7C66" : c.d! <= lim * 2 ? "#B87503" : "#9E2B3E";
+      const col = c.d! <= lim ? "#FF4D1C" : c.d! <= lim * 2 ? "#9AA397" : "#D3D6CE";
       return { key: `${c.label}-${i}`, label: c.label, x, y, col, top: c.top, d: c.d! };
     });
 
@@ -77,8 +77,8 @@ export default function Dial({ list, size }: DialProps) {
           <title>{`${p.label} — ${Math.round(p.d)} mi`}</title>
         </circle>
       ))}
-      <circle cx={cx} cy={cy} r={4.5} fill="#101F1B" />
-      <circle cx={cx} cy={cy} r={9} fill="none" stroke="#101F1B" strokeWidth={1} opacity={0.3} />
+      <circle cx={cx} cy={cy} r={4.5} fill="#0B0F0D" />
+      <circle cx={cx} cy={cy} r={9} fill="none" stroke="#0B0F0D" strokeWidth={1} opacity={0.3} />
     </svg>
   );
 }

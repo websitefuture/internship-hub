@@ -44,12 +44,12 @@ function Pill({ d, lim }: { d: number | null; lim: number }) {
 // Deterministic pastel avatar (color + initial) for a company/business name — same palette
 // family as the near/mid/far distance colors plus two extras so cards don't all look alike.
 const AVATAR_PALETTE = [
-  { bg: "#FDEEDC", fg: "#B8551A" },
-  { bg: "#E4F3EE", fg: "#0E7C66" },
-  { bg: "#FCEFF1", fg: "#9E2B3E" },
-  { bg: "#FFF6D9", fg: "#8A6D14" },
-  { bg: "#EAF0FB", fg: "#2E4E9C" },
-  { bg: "#F2E9FB", fg: "#6B3FA0" },
+  { bg: "#FFE4D6", fg: "#E0400F" },
+  { bg: "#ECFFAD", fg: "#4A5C00" },
+  { bg: "#DFF3E8", fg: "#0E7C66" },
+  { bg: "#FFE9A8", fg: "#8A6D14" },
+  { bg: "#E1E9FF", fg: "#2E4E9C" },
+  { bg: "#F1E1FF", fg: "#6B3FA0" },
 ];
 function avatarStyle(name: string): { background: string; color: string } {
   let h = 0;
@@ -685,7 +685,7 @@ export default function HomeClient() {
                       <b>6</b>
                       <span>A stretch</span>
                     </div>
-                    <div className="mockup-stat">
+                    <div className="mockup-stat pop">
                       <b>92</b>
                       <span>Best score</span>
                     </div>
@@ -723,9 +723,9 @@ export default function HomeClient() {
             <div className="step-grid">
               <div className="step-card">
                 <div className="step-num">STEP 01</div>
-                <div className="ficon" style={{ background: "#FDEEDC" }}>
+                <div className="ficon" style={{ background: "var(--accent-soft)" }}>
                   <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <path d="M4 6h12M4 10h12M4 14h8" stroke="#B8551A" strokeWidth="2" strokeLinecap="round" />
+                    <path d="M4 6h12M4 10h12M4 14h8" stroke="var(--accent-2)" strokeWidth="2" strokeLinecap="round" />
                   </svg>
                 </div>
                 <h3>Answer nine quick questions</h3>
@@ -733,10 +733,10 @@ export default function HomeClient() {
               </div>
               <div className="step-card">
                 <div className="step-num">STEP 02</div>
-                <div className="ficon" style={{ background: "#E4F3EE" }}>
+                <div className="ficon" style={{ background: "var(--lime-soft)" }}>
                   <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <circle cx="10" cy="10" r="7.5" stroke="#0E7C66" strokeWidth="2" />
-                    <path d="M2.5 10h15M10 2.5c2.5 2 2.5 13 0 15M10 2.5c-2.5 2-2.5 13 0 15" stroke="#0E7C66" strokeWidth="1.4" />
+                    <circle cx="10" cy="10" r="7.5" stroke="var(--lime-ink)" strokeWidth="2" />
+                    <path d="M2.5 10h15M10 2.5c2.5 2 2.5 13 0 15M10 2.5c-2.5 2-2.5 13 0 15" stroke="var(--lime-ink)" strokeWidth="1.4" />
                   </svg>
                 </div>
                 <h3>We search live, worldwide</h3>
@@ -744,15 +744,15 @@ export default function HomeClient() {
               </div>
               <div className="step-card">
                 <div className="step-num">STEP 03</div>
-                <div className="ficon" style={{ background: "#EAF0FB" }}>
+                <div className="ficon" style={{ background: "var(--line-2)" }}>
                   <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
                     <path
                       d="M10 18s6-5.2 6-9.6A6 6 0 0 0 4 8.4C4 12.8 10 18 10 18Z"
-                      stroke="#2E4E9C"
+                      stroke="var(--ink-2)"
                       strokeWidth="2"
                       strokeLinejoin="round"
                     />
-                    <circle cx="10" cy="8.4" r="2" stroke="#2E4E9C" strokeWidth="2" />
+                    <circle cx="10" cy="8.4" r="2" stroke="var(--ink-2)" strokeWidth="2" />
                   </svg>
                 </div>
                 <h3>Get a ranked shortlist</h3>
@@ -1064,50 +1064,50 @@ function ResultsStats({ results, lim }: { results: ScoredListing[]; lim: number 
   return (
     <div className="statcards">
       <StatCard
-        iconBg="#FDEEDC"
+        iconBg="var(--line-2)"
         icon={
           <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <rect x="3" y="6" width="14" height="10" rx="2" stroke="#B8551A" strokeWidth="1.8" />
-            <path d="M7 6V5a3 3 0 0 1 6 0v1" stroke="#B8551A" strokeWidth="1.8" />
+            <rect x="3" y="6" width="14" height="10" rx="2" stroke="var(--ink-2)" strokeWidth="1.8" />
+            <path d="M7 6V5a3 3 0 0 1 6 0v1" stroke="var(--ink-2)" strokeWidth="1.8" />
           </svg>
         }
         value={results.length}
         label="Total matches"
       />
       <StatCard
-        iconBg="#E4F3EE"
+        iconBg="var(--accent-soft)"
         icon={
           <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path
               d="M10 18s6-5.2 6-9.6A6 6 0 0 0 4 8.4C4 12.8 10 18 10 18Z"
-              stroke="#0E7C66"
+              stroke="var(--accent-2)"
               strokeWidth="1.8"
               strokeLinejoin="round"
             />
-            <circle cx="10" cy="8.4" r="1.8" stroke="#0E7C66" strokeWidth="1.8" />
+            <circle cx="10" cy="8.4" r="1.8" stroke="var(--accent-2)" strokeWidth="1.8" />
           </svg>
         }
         value={near}
         label={`Within ${lim} miles`}
       />
       <StatCard
-        iconBg="#FFF6D9"
+        iconBg="var(--line-2)"
         icon={
           <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <circle cx="10" cy="10" r="7" stroke="#8A6D14" strokeWidth="1.8" />
-            <path d="M10 6v4l3 2" stroke="#8A6D14" strokeWidth="1.8" strokeLinecap="round" />
+            <circle cx="10" cy="10" r="7" stroke="var(--ink-2)" strokeWidth="1.8" />
+            <path d="M10 6v4l3 2" stroke="var(--ink-2)" strokeWidth="1.8" strokeLinecap="round" />
           </svg>
         }
         value={mid + rem}
         label={rem > 0 ? "A stretch or remote" : "A stretch"}
       />
       <StatCard
-        iconBg="#EAF0FB"
+        iconBg="var(--lime-soft)"
         icon={
           <svg width="16" height="16" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path
               d="M10 2.5l2.2 4.6 5 .7-3.6 3.6.9 5-4.5-2.4-4.5 2.4.9-5-3.6-3.6 5-.7L10 2.5Z"
-              stroke="#2E4E9C"
+              stroke="var(--lime-ink)"
               strokeWidth="1.6"
               strokeLinejoin="round"
             />

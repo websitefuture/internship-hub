@@ -1,24 +1,35 @@
 @import "tailwindcss";
 
 :root {
-  --ink: #101f1b;
-  --ink-2: #3a4b46;
-  --ink-3: #6b7c77;
-  --paper: #faf3ea;
+  --ink: #0b0f0d;
+  --ink-2: #3a423d;
+  --ink-3: #737b74;
+  --paper: #ffffff;
   --card: #ffffff;
-  --line: #ecdfcd;
-  --line-2: #f3ead9;
-  --near: #0e7c66;
-  --mid: #b87503;
-  --far: #9e2b3e;
-  --accent: #dd6b20;
-  --accent-2: #b8551a;
-  --focus: #0e7c66;
+  --line: #e6e8e2;
+  --line-2: #f1f2ee;
+
+  /* One loud primary (electric orange) + one sparingly-used secondary (electric lime) +
+     neutrals — replacing the old orange/green/amber/red four-hue system, which is what was
+     reading as "a million different things." near/mid/far now vary the ONE accent's intensity
+     instead of switching hue. */
+  --accent: #ff4d1c;
+  --accent-2: #e0400f;
+  --accent-soft: #fff0ea;
+  --lime: #d7ff3f;
+  --lime-soft: #f4ffd6;
+  --lime-ink: #4a5c00;
+
+  --near: var(--accent);
+  --mid: #9aa39a;
+  --far: #c7cbc2;
+  --focus: var(--accent);
+
   --r: 16px;
   --r-sm: 10px;
-  --shadow-sm: 0 1px 2px rgba(16, 31, 27, 0.05), 0 1px 1px rgba(16, 31, 27, 0.03);
-  --shadow-md: 0 10px 28px rgba(16, 31, 27, 0.09), 0 2px 6px rgba(16, 31, 27, 0.05);
-  --shadow-lg: 0 30px 70px rgba(16, 31, 27, 0.16), 0 8px 20px rgba(16, 31, 27, 0.08);
+  --shadow-sm: 0 1px 2px rgba(11, 15, 13, 0.05), 0 1px 1px rgba(11, 15, 13, 0.03);
+  --shadow-md: 0 10px 28px rgba(11, 15, 13, 0.1), 0 2px 6px rgba(11, 15, 13, 0.06);
+  --shadow-lg: 0 30px 70px rgba(11, 15, 13, 0.18), 0 8px 20px rgba(11, 15, 13, 0.09);
 }
 * {
   box-sizing: border-box;
@@ -29,10 +40,7 @@ body {
   padding: 0;
 }
 body {
-  background:
-    radial-gradient(ellipse 900px 500px at 8% -8%, #ffe0c2 0%, transparent 60%),
-    radial-gradient(ellipse 900px 600px at 100% 10%, #fff3e0 0%, transparent 55%),
-    var(--paper);
+  background: var(--paper);
   color: var(--ink);
   font-family: var(--font-instrument-sans), system-ui, -apple-system, sans-serif;
   font-size: 16px;
@@ -70,7 +78,7 @@ p {
   margin: 0 0 14px;
 }
 a {
-  color: var(--near);
+  color: var(--accent);
 }
 button {
   font-family: inherit;
@@ -218,27 +226,48 @@ header.bar {
     transform: none;
   }
 }
+/* Full-bleed dark hero — breaks out of the centered .wrap it sits inside via the
+   100vw/-50%-translate trick, then repads itself so the content still lines up with the
+   1080px column. Modeled on the dark-hero-plus-one-neon-accent pattern used by Handshake
+   (joinhandshake.com) and Ramp (ramp.com) — both ditch a soft multi-hue palette for near-black
+   plus a single electric color, which is what actually reads as "flashy" rather than "busy." */
 .hero {
-  padding: 72px 0 0;
+  width: 100vw;
+  margin-left: 50%;
+  transform: translateX(-50%);
+  padding: 88px max(24px, calc((100vw - 1080px) / 2 + 24px)) 0;
   text-align: center;
+  background:
+    radial-gradient(ellipse 620px 380px at 18% 0%, rgba(255, 77, 28, 0.22) 0%, transparent 60%),
+    radial-gradient(ellipse 500px 320px at 88% 10%, rgba(215, 255, 63, 0.1) 0%, transparent 55%),
+    radial-gradient(circle, rgba(255, 255, 255, 0.07) 1px, transparent 1px) 0 0 / 26px 26px,
+    linear-gradient(175deg, #0b0f0d 0%, #12211a 55%, #0b0f0d 100%);
+  color: #fff;
 }
 .hero-text {
   max-width: 740px;
   margin: 0 auto;
   animation: riseIn 0.6s ease both;
 }
+.hero h1 {
+  color: #fff;
+  text-transform: uppercase;
+}
+.hero .accent-text {
+  color: var(--lime);
+}
 .kicker {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: #0b5f4e;
+  color: #fff;
   font-weight: 700;
   font-size: 13px;
   letter-spacing: 0.02em;
   text-transform: uppercase;
   margin-bottom: 24px;
-  background: #eaf5f1;
-  border: 1px solid #beddd3;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.22);
   padding: 6px 15px 6px 11px;
   border-radius: 999px;
 }
@@ -246,22 +275,27 @@ header.bar {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: var(--near);
+  background: var(--lime);
   display: inline-block;
+  box-shadow: 0 0 8px 1px rgba(215, 255, 63, 0.7);
 }
 .hero-sub {
   font-size: 18px;
-  color: var(--ink-2);
+  color: rgba(255, 255, 255, 0.72);
   max-width: 50ch;
   margin: 20px auto 0;
 }
 .hero .btn {
   margin-top: 30px;
+  box-shadow: 0 0 0 0 transparent;
+}
+.hero .btn:hover {
+  box-shadow: var(--shadow-md), 0 0 40px rgba(255, 77, 28, 0.35);
 }
 .hero-note {
   margin-top: 14px;
   font-size: 13px;
-  color: var(--ink-3);
+  color: rgba(255, 255, 255, 0.5);
 }
 
 /* role chip strip */
@@ -277,9 +311,9 @@ header.bar {
 .role-chip {
   font-size: 12.5px;
   font-weight: 600;
-  color: var(--ink-2);
-  background: var(--card);
-  border: 1px solid var(--line);
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 999px;
   padding: 5px 13px;
 }
@@ -297,7 +331,7 @@ header.bar {
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 20px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--shadow-lg), 0 0 90px rgba(255, 77, 28, 0.2);
   overflow: hidden;
   transform: perspective(1400px) rotateX(3deg);
 }
@@ -336,11 +370,21 @@ header.bar {
   border-radius: 12px;
   padding: 9px 11px;
 }
+.mockup-stat.pop {
+  background: var(--accent-soft);
+  border-color: #ffd9c7;
+}
+.mockup-stat.pop b {
+  color: var(--accent-2);
+}
 .mockup-stat b {
   display: block;
   font-size: 17px;
   font-weight: 800;
   letter-spacing: -0.02em;
+}
+.mockup-score {
+  color: var(--accent-2);
 }
 .mockup-stat span {
   font-size: 10px;
@@ -582,7 +626,8 @@ header.bar {
   width: 22px;
   height: 22px;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(215, 255, 63, 0.16);
+  color: var(--lime);
   flex: 0 0 22px;
   display: flex;
   align-items: center;
@@ -732,7 +777,7 @@ input:focus {
 }
 .opt.sel {
   border-color: var(--near);
-  background: #eaf5f1;
+  background: var(--accent-soft);
   box-shadow: inset 0 0 0 1px var(--near);
 }
 .opt .tick {
@@ -776,9 +821,9 @@ input:focus {
   font-size: 14px;
   padding: 10px 13px;
   border-radius: 8px;
-  background: #eaf5f1;
-  border: 1px solid #beddd3;
-  color: #0b5f4e;
+  background: var(--accent-soft);
+  border: 1px solid #ffd2bd;
+  color: var(--accent-2);
   margin-bottom: 14px;
 }
 .locstate.err {
@@ -995,13 +1040,13 @@ input:focus {
   letter-spacing: -0.02em;
 }
 .row.band-near .avatar-sq {
-  box-shadow: 0 0 0 2px rgba(14, 124, 102, 0.35);
+  box-shadow: 0 0 0 2px rgba(255, 77, 28, 0.4);
 }
 .row.band-mid .avatar-sq {
-  box-shadow: 0 0 0 2px rgba(184, 117, 3, 0.35);
+  box-shadow: 0 0 0 2px rgba(115, 123, 116, 0.3);
 }
 .row.band-far .avatar-sq {
-  box-shadow: 0 0 0 2px rgba(158, 43, 62, 0.35);
+  box-shadow: none;
 }
 .rank {
   font-weight: 700;
@@ -1062,6 +1107,7 @@ input:focus {
   letter-spacing: -0.03em;
   display: block;
   line-height: 1;
+  color: var(--accent-2);
 }
 .score span {
   font-size: 12px;
@@ -1082,19 +1128,20 @@ input:focus {
   border-radius: 99px;
 }
 .pill-near {
-  background: rgba(14, 124, 102, 0.12);
-  color: #0b5f4e;
+  background: var(--accent-soft);
+  color: var(--accent-2);
 }
 .pill-mid {
-  background: rgba(184, 117, 3, 0.14);
-  color: #8a5d02;
+  background: var(--line-2);
+  color: var(--ink-2);
 }
 .pill-far {
-  background: rgba(158, 43, 62, 0.12);
-  color: #8a2436;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink-3);
 }
 .pill-muted {
-  background: rgba(58, 75, 70, 0.1);
+  background: var(--line-2);
   color: var(--ink-2);
 }
 .empty {
