@@ -15,8 +15,8 @@ export interface Company {
   desc: string; // description
 }
 
-export type RoleKey = "marketing" | "ops" | "eng" | "design" | "data";
-export type PriorityKey = "commute" | "fit" | "size" | "growth" | "reach";
+export type RoleKey = "marketing" | "ops" | "eng" | "design" | "data" | "trades" | "healthcare" | "hospitality" | "retail";
+export type PriorityKey = "commute" | "fit" | "pay";
 
 export interface LocationAnswer {
   lat: number;
@@ -31,7 +31,6 @@ export interface Answers {
   how?: "drive" | "driven" | "transit" | "none";
   role?: RoleKey[];
   stage?: "hs" | "ug" | "grad" | "other";
-  size?: "tiny" | "small" | "big" | "any";
   mode?: "onsite" | "hybrid" | "remote";
   when?: "sum27" | "school" | "asap" | "flex";
   pay?: "yes" | "prefer" | "no";
@@ -43,22 +42,6 @@ export interface UserProfile {
   email: string;
   lat?: number;
   lng?: number;
-}
-
-export type ScoreParts = Record<"Commute" | "Role fit" | "Team size" | "Growth" | "Reach", number>;
-
-export interface ScoredCompany extends Company {
-  d: number | null; // distance in miles, null if remote
-  s: number; // total score 0-100
-  parts: ScoreParts;
-  best: [string, number];
-  worst: [string, number];
-}
-
-export interface PlottedCompany extends ScoredCompany {
-  b: number; // bearing in degrees
-  lim: number;
-  top?: boolean;
 }
 
 export interface DriveTime {
@@ -75,4 +58,42 @@ export interface Question {
   type: "loc" | "one" | "many";
   o?: QuestionOption[];
   max?: number;
+}
+
+// A place returned by the free-text city search (geocoded via OpenStreetMap/Nominatim).
+export interface GeoResult {
+  label: string; // concise, e.g. "San Francisco, California"
+  fullLabel: string; // full geocoder display name, shown once picked
+  lat: number;
+  lng: number;
+  countryCode: string; // ISO 3166-1 alpha-2, lowercase
+}
+
+// A single job/internship posting as returned by the live search API, before scoring.
+export interface RawListing {
+  id: string;
+  title: string;
+  company: string;
+  locationLabel: string;
+  lat: number | null;
+  lng: number | null;
+  description: string;
+  category: string;
+  url: string;
+  salaryMin: number | null;
+  salaryMax: number | null;
+  salaryIsPredicted: boolean;
+  created: string | null;
+  remoteGuess: "remote" | "hybrid" | "onsite";
+  unpaidMentioned: boolean;
+}
+
+export type LiveScoreParts = Record<"Commute" | "Role fit" | "Pay" | "Mode", number>;
+
+export interface ScoredListing extends RawListing {
+  d: number | null; // distance in miles from the searched location
+  s: number; // total score 0-100
+  parts: LiveScoreParts;
+  best: [string, number];
+  worst: [string, number];
 }

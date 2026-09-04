@@ -1,10 +1,17 @@
 "use client";
 
 import { jitter } from "@/lib/geo";
-import type { PlottedCompany } from "@/lib/types";
+
+export interface DialPoint {
+  label: string;
+  d: number | null;
+  b: number;
+  lim: number;
+  top?: boolean;
+}
 
 interface DialProps {
-  list: PlottedCompany[];
+  list: DialPoint[];
   size: number;
 }
 
@@ -20,14 +27,14 @@ export default function Dial({ list, size }: DialProps) {
   const points = list
     .filter((c) => c.d !== null && c.d !== undefined)
     .map((c) => {
-      const j = jitter(c.n, c.d! < 2 ? 26 : c.d! < 20 ? 20 : 14);
+      const j = jitter(c.label, c.d! < 2 ? 26 : c.d! < 20 ? 20 : 14);
       const r = rr(c.d!);
       const th = ((c.b - 90) * Math.PI) / 180;
       const x = cx + r * Math.cos(th) + j[0];
       const y = cy + r * Math.sin(th) + j[1];
       const lim = c.lim || 15;
       const col = c.d! <= lim ? "#0E7C66" : c.d! <= lim * 2 ? "#B87503" : "#9E2B3E";
-      return { key: c.n, x, y, col, top: c.top, d: c.d! };
+      return { key: c.label, x, y, col, top: c.top, d: c.d! };
     });
 
   return (

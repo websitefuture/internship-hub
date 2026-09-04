@@ -1,28 +1,5 @@
 import type { Question } from "./types";
 
-export const CITIES: [name: string, lat: number, lng: number][] = [
-  ["Campbell", 37.2872, -121.95],
-  ["San Jose", 37.3382, -121.8863],
-  ["Los Gatos", 37.2358, -121.9624],
-  ["Saratoga", 37.2638, -122.023],
-  ["Santa Clara", 37.3541, -121.9552],
-  ["Cupertino", 37.323, -122.0322],
-  ["Sunnyvale", 37.3688, -122.0363],
-  ["Mountain View", 37.3861, -122.0839],
-  ["Palo Alto", 37.4419, -122.143],
-  ["Redwood City", 37.4852, -122.2364],
-  ["San Mateo", 37.563, -122.3255],
-  ["Fremont", 37.5485, -121.9886],
-  ["Oakland", 37.8044, -122.2712],
-  ["Berkeley", 37.8715, -122.273],
-  ["San Francisco", 37.7749, -122.4194],
-  ["Daly City", 37.6879, -122.4702],
-  ["Hayward", 37.6688, -122.0808],
-  ["Milpitas", 37.4323, -121.8996],
-  ["Morgan Hill", 37.1305, -121.6544],
-  ["Gilroy", 37.0058, -121.5683],
-];
-
 export const QUESTIONS: Question[] = [
   { k: "loc", t: "Where are you based?", s: "Everything else is ranked from here.", type: "loc" },
   {
@@ -57,9 +34,13 @@ export const QUESTIONS: Question[] = [
     o: [
       ["marketing", "Marketing and growth", "Content, social, SEO, ads"],
       ["ops", "Business and operations", "Whatever needs doing at a small company"],
-      ["eng", "Engineering", "Writing code"],
+      ["eng", "Engineering and tech", "Writing code, IT support"],
       ["design", "Design", "Visual, brand, product"],
       ["data", "Data and analysis", "Research, spreadsheets, reporting"],
+      ["trades", "Trades and hands-on work", "Workshop, construction, mechanical, manufacturing"],
+      ["healthcare", "Healthcare", "Clinics, hospitals, patient care"],
+      ["hospitality", "Hospitality and food", "Restaurants, hotels, events, catering"],
+      ["retail", "Retail and customer service", "Stores, customer-facing roles"],
     ],
   },
   {
@@ -72,18 +53,6 @@ export const QUESTIONS: Question[] = [
       ["ug", "College", ""],
       ["grad", "Recent graduate", ""],
       ["other", "Something else", ""],
-    ],
-  },
-  {
-    k: "size",
-    t: "How big a team do you want?",
-    s: "Smaller usually means more responsibility and less structure.",
-    type: "one",
-    o: [
-      ["tiny", "Under 10 people", "You'd work directly with a founder"],
-      ["small", "10 to 50", "Small but with some structure"],
-      ["big", "50 or more", "A real process, a recognisable name"],
-      ["any", "No preference", ""],
     ],
   },
   {
@@ -129,9 +98,7 @@ export const QUESTIONS: Question[] = [
     o: [
       ["commute", "Being close to home", ""],
       ["fit", "Doing the work I actually want", ""],
-      ["size", "Team size", ""],
-      ["growth", "Joining something growing fast", ""],
-      ["reach", "Being able to reach a real person", "Some companies are much easier to contact"],
+      ["pay", "Getting paid", ""],
     ],
   },
 ];

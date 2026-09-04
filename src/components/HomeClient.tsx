@@ -1,32 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import Dial from "@/components/Dial";
+import Dial, { type DialPoint } from "@/components/Dial";
 import { bearing, miles } from "@/lib/geo";
-import { CITIES, QUESTIONS } from "@/lib/questions";
-import { score } from "@/lib/scoring";
+import { QUESTIONS } from "@/lib/questions";
 import { load, save } from "@/lib/storage";
-import type { Answers, Company, DriveTime, PlottedCompany, ScoredCompany, UserProfile } from "@/lib/types";
+import type { Answers, Company, GeoResult, Question, ScoredListing, UserProfile } from "@/lib/types";
 
 type View = "landing" | "auth" | "q" | "res";
 
 const STRONG: Record<string, (d: number | null) => string> = {
   Commute: (d) => (d === null ? "remote, so distance is not a factor" : `${Math.round(d)} miles away`),
-  "Role fit": () => "the work is close to what you asked for",
-  "Team size": () => "the team size is what you wanted",
-  Growth: () => "growing quickly right now",
-  Reach: () => "a named founder you can actually reach",
+  "Role fit": () => "the listing matches what you asked for",
+  Pay: () => "it looks like a paid role",
+  Mode: () => "the in-person/remote setup is what you wanted",
 };
 const WEAK: Record<string, (d: number | null) => string> = {
   Commute: (d) => (d === null ? "fully remote" : `${Math.round(d!)} miles is a long way`),
-  "Role fit": () => "the work is further from what you asked for",
-  "Team size": () => "the team size is not what you asked for",
-  Growth: () => "early and unproven",
-  Reach: () => "no easy way to reach a person",
+  "Role fit": () => "the listing is further from what you asked for",
+  Pay: () => "pay isn't confirmed, or doesn't look paid",
+  Mode: () => "the in-person/remote setup isn't quite what you wanted",
 };
 
-function why(c: ScoredCompany): string {
+function why(c: ScoredListing): string {
   const s = STRONG[c.best[0]](c.d);
   const w = WEAK[c.worst[0]](c.d);
   return c.best[1] - c.worst[1] < 0.25 ? `Solid on everything: ${s}.` : `Ranks here because ${s}, despite ${w}.`;
@@ -47,17 +44,33 @@ function Pill({ d, lim }: { d: number | null; lim: number }) {
   );
 }
 
-function csvDownload(res: ScoredCompany[]) {
-  const rows: (string | number)[][] = [["Rank", "Company", "Miles", "City", "Industry", "People", "Score", "Website"]];
+function payLabel(c: ScoredListing): string {
+  if (c.salaryMin || c.salaryMax) {
+    const lo = c.salaryMin ? Math.round(c.salaryMin).toLocaleString() : null;
+    const hi = c.salaryMax ? Math.round(c.salaryMax).toLocaleString() : null;
+    const range = lo && hi && lo !== hi ? `${lo}–${hi}` : lo || hi;
+    return `${c.salaryIsPredicted ? "Est. " : ""}${range}/yr`;
+  }
+  return c.unpaidMentioned ? "Unpaid" : "Pay not listed";
+}
+
+function csvDownload(res: ScoredListing[]) {
+  const rows: (string | number)[][] = [["Rank", "Title", "Company", "Miles", "Location", "Score", "Listing"]];
   res.slice(0, 50).forEach((c, i) => {
-    rows.push([i + 1, c.n, c.d === null ? "Remote" : Math.round(c.d), c.c, c.i, c.e || "unknown", c.s, c.w || ""]);
+    rows.push([i + 1, c.title, c.company, c.d === null ? "Remote" : Math.round(c.d), c.locationLabel, c.s, c.url || ""]);
   });
   const csv = rows.map((r) => r.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = "radius-shortlist.csv";
+  a.download = "internship-shortlist.csv";
   a.click();
+}
+
+function isAnswerEmpty(q: Question, answers: Answers): boolean {
+  const v = answers[q.k];
+  if (q.type === "many") return !(Array.isArray(v) && v.length);
+  return !v;
 }
 
 const HERO_ORIGIN = { lat: 37.2872, lng: -121.95 }; // Campbell — matches the prototype's hero demo
@@ -70,14 +83,20 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
   const [qIndex, setQIndex] = useState(0);
   const [qHint, setQHint] = useState("");
   const [tab, setTab] = useState(0);
-  const [results, setResults] = useState<ScoredCompany[] | null>(null);
+  const [results, setResults] = useState<ScoredListing[] | null>(null);
+  const [coverage, setCoverage] = useState(true);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [locMsg, setLocMsg] = useState<{ text: string; err?: boolean } | null>(null);
   const [geoBusy, setGeoBusy] = useState(false);
   const [computing, setComputing] = useState(false);
+  const [progressMsg, setProgressMsg] = useState("");
   const [dialSize, setDialSize] = useState(360);
   const [resDialSize, setResDialSize] = useState(360);
+  const [citySearch, setCitySearch] = useState("");
+  const [cityResults, setCityResults] = useState<GeoResult[]>([]);
+  const [cityLoading, setCityLoading] = useState(false);
+  const cityDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const resize = () => {
@@ -112,12 +131,15 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
     }
   }, [status, session]);
 
-  const heroDial: PlottedCompany[] = useMemo(() => {
-    const demo = companies.filter((c) => c.lat !== null).map((c) => {
-      const d = miles(HERO_ORIGIN.lat, HERO_ORIGIN.lng, c.lat!, c.lng!);
-      const b = bearing(HERO_ORIGIN.lat, HERO_ORIGIN.lng, c.lat!, c.lng!);
-      return { ...c, d, b, s: 0, parts: {} as never, best: ["", 0] as [string, number], worst: ["", 0] as [string, number], lim: 15 } as PlottedCompany;
-    });
+  const heroDial: DialPoint[] = useMemo(() => {
+    const demo: DialPoint[] = companies
+      .filter((c) => c.lat !== null)
+      .map((c) => ({
+        label: c.n,
+        d: miles(HERO_ORIGIN.lat, HERO_ORIGIN.lng, c.lat!, c.lng!),
+        b: bearing(HERO_ORIGIN.lat, HERO_ORIGIN.lng, c.lat!, c.lng!),
+        lim: 15,
+      }));
     demo.slice(0, 20).forEach((c) => (c.top = true));
     return demo;
   }, [companies]);
@@ -162,7 +184,7 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
 
   function useGeolocation() {
     if (!navigator.geolocation) {
-      setLocMsg({ text: "This browser can't share a location. Pick a city instead.", err: true });
+      setLocMsg({ text: "This browser can't share a location. Search for a city instead.", err: true });
       return;
     }
     setGeoBusy(true);
@@ -170,32 +192,49 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
       (p) => {
         setGeoBusy(false);
         setAnswer("loc", { lat: p.coords.latitude, lng: p.coords.longitude, label: "your current location", exact: true });
+        setCitySearch("");
+        setCityResults([]);
         setLocMsg({ text: "Using your current location." });
       },
       (e) => {
         setGeoBusy(false);
         const m =
           e.code === 1
-            ? "You blocked location access. Pick a city below instead, it works just as well."
-            : "Couldn't get a location. Pick a city below.";
+            ? "You blocked location access. Search for a city below instead, it works just as well."
+            : "Couldn't get a location. Search for a city below.";
         setLocMsg({ text: m, err: true });
       },
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
     );
   }
 
-  function pickCity(cityName: string) {
-    const c = CITIES.find((x) => x[0] === cityName);
-    if (!c) return;
-    setAnswer("loc", { lat: c[1], lng: c[2], label: c[0], exact: false });
-    setLocMsg({ text: `Using ${c[0]}. City centre.` });
+  function onCityInput(v: string) {
+    setCitySearch(v);
+    if (cityDebounceRef.current) clearTimeout(cityDebounceRef.current);
+    if (v.trim().length < 3) {
+      setCityResults([]);
+      return;
+    }
+    cityDebounceRef.current = setTimeout(() => {
+      setCityLoading(true);
+      fetch(`/api/geocode?q=${encodeURIComponent(v)}`)
+        .then((r) => r.json())
+        .then((data) => setCityResults(data.results || []))
+        .catch(() => setCityResults([]))
+        .finally(() => setCityLoading(false));
+    }, 400);
+  }
+
+  function pickPlace(g: GeoResult) {
+    setAnswer("loc", { lat: g.lat, lng: g.lng, label: g.label, exact: false });
+    setLocMsg({ text: `Using ${g.fullLabel}.` });
+    setCitySearch(g.label);
+    setCityResults([]);
   }
 
   async function goNext() {
     const q = currentQ;
-    const v = answers[q.k];
-    const empty = q.type === "loc" ? !v : q.type === "many" ? !(Array.isArray(v) && v.length) : !v;
-    if (empty) {
+    if (isAnswerEmpty(q, answers)) {
       setQHint(q.type === "loc" ? "Choose a location to continue." : "Pick at least one.");
       return;
     }
@@ -210,34 +249,46 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
     setUser(finalUser);
     setComputing(true);
 
-    let driveTimes: (DriveTime | null)[] | undefined;
-    try {
-      const res = await fetch("/api/drive-times", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          origin: { lat: loc.lat, lng: loc.lng },
-          destinations: companies.map((c) => (c.lat === null ? null : { lat: c.lat, lng: c.lng })),
-        }),
-      });
-      if (res.ok) driveTimes = (await res.json()).times;
-    } catch {
-      // routing unavailable — score() falls back to a straight-line estimate per company
-    }
+    const stages = [
+      "Searching real internship listings near you…",
+      "Checking real distances…",
+      "Matching against what you want to do…",
+      "Ranking your shortlist…",
+    ];
+    let stage = 0;
+    setProgressMsg(stages[0]);
+    const stageTimer = setInterval(() => {
+      stage = Math.min(stage + 1, stages.length - 1);
+      setProgressMsg(stages[stage]);
+    }, 3500);
 
-    const computed = score(answers, finalUser, companies, driveTimes);
-    setResults(computed);
-    setTab(0);
-    setView("res");
-    setComputing(false);
-    if (status === "authenticated") {
-      fetch("/api/user-data", {
+    try {
+      const res = await fetch("/api/search-live", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers, results: computed }),
-      }).catch(() => {});
-    } else {
-      save("answers", answers);
+        body: JSON.stringify({ answers, loc }),
+      });
+      const data = await res.json();
+      const computed: ScoredListing[] = data.results || [];
+      setResults(computed);
+      setCoverage(data.coverage !== false);
+      setTab(0);
+      setView("res");
+      if (status === "authenticated") {
+        fetch("/api/user-data", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ answers, results: computed }),
+        }).catch(() => {});
+      } else {
+        save("answers", answers);
+      }
+    } catch {
+      setQHint("Search failed — check your connection and try again.");
+    } finally {
+      clearInterval(stageTimer);
+      setComputing(false);
+      setProgressMsg("");
     }
   }
 
@@ -248,14 +299,15 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
     }
   }
 
-  const resDial: PlottedCompany[] = useMemo(() => {
+  const resDial: DialPoint[] = useMemo(() => {
     if (!results || !user?.lat) return [];
     const lim = parseFloat(answers.max || "30");
-    const withB = results.map((c) => ({
-      ...c,
-      b: c.lat === null ? 0 : bearing(user.lat!, user.lng!, c.lat, c.lng!),
+    const withB: DialPoint[] = results.map((c) => ({
+      label: c.title,
+      d: c.d,
+      b: c.lat === null || c.lng === null ? 0 : bearing(user.lat!, user.lng!, c.lat, c.lng),
       lim,
-    })) as PlottedCompany[];
+    }));
     withB.slice(0, 25).forEach((c) => (c.top = true));
     return withB;
   }, [results, user, answers.max]);
@@ -264,7 +316,7 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
     if (!results) return [];
     const list = [...results];
     if (tab === 1) list.sort((a, b) => (a.d === null ? 1e9 : a.d) - (b.d === null ? 1e9 : b.d));
-    if (tab === 2) list.sort((a, b) => b.x - a.x || b.s - a.s);
+    if (tab === 2) list.sort((a, b) => new Date(b.created ?? 0).getTime() - new Date(a.created ?? 0).getTime());
     return list.slice(0, 30);
   }, [results, tab]);
 
@@ -316,16 +368,16 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
 
           <div className="fact-list">
             <div>
-              <h3>Ten questions</h3>
+              <h3>Nine questions</h3>
               <p>Where you are, how far you&apos;ll go, how you get there, and what you want to do. Two minutes.</p>
             </div>
             <div>
               <h3>Distance first</h3>
-              <p>Your browser can share your location, or you can pick a city. Sign in to save it, or skip the account entirely.</p>
+              <p>Your browser can share your location, or search any city in the world. Sign in to save it, or skip the account entirely.</p>
             </div>
             <div>
-              <h3>175 companies</h3>
-              <p>Bay Area startups, each scored on commute, role fit, team size, growth and how reachable they are.</p>
+              <h3>Live, worldwide</h3>
+              <p>The moment you finish, we search real internship listings near you and rank them by distance and fit.</p>
             </div>
           </div>
         </main>
@@ -404,20 +456,29 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
                     </div>
                   )}
                 </div>
-                <label htmlFor="citysel">Or pick the closest city</label>
-                <select
-                  id="citysel"
-                  style={{ width: "100%", padding: "11px 13px", border: "1px solid var(--line)", borderRadius: 8, fontFamily: "inherit", fontSize: 15, background: "#fff" }}
-                  value={answers.loc && !answers.loc.exact ? answers.loc.label : ""}
-                  onChange={(e) => pickCity(e.target.value)}
-                >
-                  <option value="">Choose a city</option>
-                  {CITIES.map((c) => (
-                    <option key={c[0]} value={c[0]}>
-                      {c[0]}
-                    </option>
-                  ))}
-                </select>
+                <label htmlFor="citysearch">Or search any city, anywhere</label>
+                <div className="citysearch">
+                  <input
+                    id="citysearch"
+                    type="text"
+                    placeholder="Search for a city, e.g. Austin, TX"
+                    autoComplete="off"
+                    value={citySearch}
+                    onChange={(e) => onCityInput(e.target.value)}
+                  />
+                  {cityLoading && <div className="cityhint">Searching…</div>}
+                  {cityResults.length > 0 && (
+                    <ul className="cityresults">
+                      {cityResults.map((g, idx) => (
+                        <li key={idx}>
+                          <button type="button" onClick={() => pickPlace(g)}>
+                            {g.fullLabel}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
             ) : (
               <div className="opts">
@@ -448,8 +509,8 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
               <button className="btn ghost" style={{ visibility: qIndex === 0 ? "hidden" : "visible" }} onClick={goBack} disabled={computing}>
                 Back
               </button>
-              <button className="btn" onClick={goNext} disabled={computing}>
-                {computing ? "Finding real drive times…" : qIndex === QUESTIONS.length - 1 ? "See my shortlist" : "Next"}
+              <button className="btn" onClick={goNext} disabled={computing || isAnswerEmpty(currentQ, answers)}>
+                {computing ? progressMsg || "Working…" : qIndex === QUESTIONS.length - 1 ? "See my shortlist" : "Next"}
               </button>
               <span className="note">{qHint}</span>
             </div>
@@ -464,7 +525,9 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
               <div>
                 <h2>Your shortlist</h2>
                 <p className="note" style={{ marginTop: 6 }}>
-                  {results.length} companies ranked from {answers.loc!.label}.
+                  {coverage
+                    ? `${results.length} live listings ranked from ${answers.loc!.label}.`
+                    : `We don't have live coverage for ${answers.loc!.label} yet — coverage today is the US, UK, Canada, Australia, and about a dozen more countries, mostly in Europe.`}
                 </p>
               </div>
               <div style={{ display: "flex", gap: 8 }}>
@@ -483,66 +546,68 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
               </div>
             </div>
 
-            <ResultsStats results={results} lim={parseFloat(answers.max || "30")} />
+            {results.length > 0 && (
+              <>
+                <ResultsStats results={results} lim={parseFloat(answers.max || "30")} />
 
-            <div className="dialrow">
-              <Dial list={resDial} size={resDialSize} />
-            </div>
+                <div className="dialrow">
+                  <Dial list={resDial} size={resDialSize} />
+                </div>
 
-            <div className="legend">
-              <span>
-                <i className="dot" style={{ background: "var(--near)" }} /> within your range
-              </span>
-              <span>
-                <i className="dot" style={{ background: "var(--mid)" }} /> a stretch
-              </span>
-              <span>
-                <i className="dot" style={{ background: "var(--far)" }} /> too far to commute
-              </span>
-              <span>each ring is a distance band from where you are</span>
-            </div>
+                <div className="legend">
+                  <span>
+                    <i className="dot" style={{ background: "var(--near)" }} /> within your range
+                  </span>
+                  <span>
+                    <i className="dot" style={{ background: "var(--mid)" }} /> a stretch
+                  </span>
+                  <span>
+                    <i className="dot" style={{ background: "var(--far)" }} /> too far to commute
+                  </span>
+                  <span>each ring is a distance band from where you are</span>
+                </div>
 
-            <div className="tabs">
-              {["Best matches", "Closest first", "Easiest to contact"].map((t, i) => (
-                <button key={t} className={`tab${i === tab ? " on" : ""}`} onClick={() => setTab(i)}>
-                  {t}
-                </button>
-              ))}
-            </div>
+                <div className="tabs">
+                  {["Best matches", "Closest first", "Most recent"].map((t, i) => (
+                    <button key={t} className={`tab${i === tab ? " on" : ""}`} onClick={() => setTab(i)}>
+                      {t}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
 
             <div className="list">
               {sortedList.length ? (
                 sortedList.map((c, i) => {
                   const b = band(c.d, parseFloat(answers.max || "30"));
                   return (
-                  <div
-                    key={c.n}
-                    className={`row${i < 3 && tab === 0 ? " lead" : ""}${b ? ` band-${b}` : ""}`}
-                  >
-                    <div className="rank">{i + 1}</div>
-                    <div>
-                      <h3>{c.n}</h3>
-                      <div className="meta">
-                        <Pill d={c.d} lim={parseFloat(answers.max || "30")} /> &nbsp;{c.c} · {c.i}
-                        {c.e ? ` · ${c.e} people` : " · size unknown"}
-                      </div>
-                      <p className="desc">{c.desc || ""}</p>
-                      {c.k && (
+                    <div key={c.id} className={`row${i < 3 && tab === 0 ? " lead" : ""}${b ? ` band-${b}` : ""}`}>
+                      <div className="rank">{i + 1}</div>
+                      <div>
+                        <h3>{c.title}</h3>
+                        <div className="meta">
+                          <Pill d={c.d} lim={parseFloat(answers.max || "30")} /> &nbsp;{c.company} · {c.locationLabel}
+                        </div>
+                        <p className="desc">{c.description ? `${c.description.slice(0, 220)}${c.description.length > 220 ? "…" : ""}` : ""}</p>
                         <p className="desc" style={{ color: "var(--ink-3)" }}>
-                          {c.k}
+                          {payLabel(c)} · {c.remoteGuess === "remote" ? "Remote" : c.remoteGuess === "hybrid" ? "Hybrid" : "In person"}
                         </p>
-                      )}
-                      <p className="why">{why(c)}</p>
+                        <p className="why">{why(c)}</p>
+                      </div>
+                      <div className="score">
+                        <b>{c.s}</b>
+                        <span>of 100</span>
+                      </div>
                     </div>
-                    <div className="score">
-                      <b>{c.s}</b>
-                      <span>of 100</span>
-                    </div>
-                  </div>
                   );
                 })
               ) : (
-                <div className="empty">Nothing matched. Try widening the distance on question 2.</div>
+                <div className="empty">
+                  {coverage
+                    ? "Nothing matched. Try widening the distance on question 2, or a bigger nearby city."
+                    : "Try a city in a country we have live coverage for."}
+                </div>
               )}
             </div>
           </div>
@@ -551,27 +616,24 @@ export default function HomeClient({ companies }: { companies: Company[] }) {
 
       <footer>
         <div className="wrap">
-          Company data compiled September 2026 and not re-verified since. Distances are real driving routes, but to
-          each company&apos;s city centre rather than its exact street address — companies in the same city will
-          show the same distance. Transit time is estimated from drive time, not a real transit route. Check that a
-          company still exists and that the contact still works there before you email them.
+          Listings come from a live jobs-search API and are re-fetched every time you run the questionnaire — not a
+          static dataset. Distance uses the listing&apos;s stated location, with a real driving route where we could
+          get one and a straight-line estimate otherwise. &quot;Remote / hybrid / in person&quot; and pay are read
+          from the listing text automatically and can be wrong — check the actual posting before you apply. Live
+          coverage is currently limited to a set of countries, mostly the US, UK, Canada, Australia, and Western
+          Europe.
         </div>
       </footer>
     </>
   );
 }
 
-function ResultsStats({ results, lim }: { results: ScoredCompany[]; lim: number }) {
+function ResultsStats({ results, lim }: { results: ScoredListing[]; lim: number }) {
   const near = results.filter((c) => c.d !== null && c.d <= lim).length;
   const mid = results.filter((c) => c.d !== null && c.d > lim && c.d <= lim * 2).length;
   const far = results.filter((c) => c.d !== null && c.d > lim * 2).length;
   const rem = results.filter((c) => c.d === null).length;
   const total = Math.max(1, near + mid + far);
-  const cityCounts: Record<string, number> = {};
-  results.forEach((c) => {
-    if (c.d !== null && c.d > lim * 2) cityCounts[c.c] = (cityCounts[c.c] || 0) + 1;
-  });
-  const bigCity = Object.entries(cityCounts).sort((a, b) => b[1] - a[1])[0];
   return (
     <div className="distbar-wrap">
       <div className="distbar">
@@ -595,12 +657,6 @@ function ResultsStats({ results, lim }: { results: ScoredCompany[]; lim: number 
           <span>too far to commute</span>
         </div>
       </div>
-      {bigCity && (
-        <p className="readout">
-          {bigCity[1]} of those are in {bigCity[0]}. That cluster is the shape of the startup world, not the shape
-          of your options.
-        </p>
-      )}
       {rem > 0 && <p className="readout">{rem} are fully remote.</p>}
     </div>
   );

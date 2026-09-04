@@ -503,6 +503,51 @@ input:focus {
   border-color: #efc6cd;
   color: #8a2436;
 }
+.citysearch {
+  position: relative;
+  margin-bottom: 26px;
+}
+.citysearch input[type="text"] {
+  width: 100%;
+}
+.cityhint {
+  font-size: 13px;
+  color: var(--ink-3);
+  margin-top: 6px;
+}
+.cityresults {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 4px;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--r);
+  box-shadow: 0 8px 24px rgba(16, 31, 27, 0.1);
+  max-height: 240px;
+  overflow-y: auto;
+}
+.cityresults li + li {
+  border-top: 1px solid var(--line-2);
+}
+.cityresults button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 9px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: var(--ink);
+}
+.cityresults button:hover {
+  background: var(--line-2);
+}
 
 /* ---------- results ---------- */
 .res {
