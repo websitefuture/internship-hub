@@ -623,7 +623,14 @@ export default function HomeClient() {
     <>
       <header className="bar">
         <div className="wrap">
-          <button className="brand" onClick={() => go("landing")} aria-label="Internship Hub home">
+          <button
+            className="brand"
+            onClick={(e) => {
+              go("landing");
+              e.currentTarget.blur();
+            }}
+            aria-label="Internship Hub home"
+          >
             {/* A location pin, not an abstract mark — the whole product is "find internships
                 near you," so the logo doubles as a tiny map pin with a glowing waypoint. */}
             <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
@@ -783,7 +790,14 @@ export default function HomeClient() {
       {view === "landing" && (
         <footer className="site-footer">
           <div className="wrap site-footer-row">
-            <button className="brand" onClick={() => go("landing")} aria-label="Internship Hub home">
+            <button
+            className="brand"
+            onClick={(e) => {
+              go("landing");
+              e.currentTarget.blur();
+            }}
+            aria-label="Internship Hub home"
+          >
               <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
                 <path
                   d="M12 2C7.86 2 4.5 5.36 4.5 9.5c0 5.25 6.18 11.28 6.98 12.02a.78.78 0 0 0 1.04 0C13.32 20.78 19.5 14.75 19.5 9.5 19.5 5.36 16.14 2 12 2z"
