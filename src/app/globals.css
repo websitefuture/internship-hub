@@ -125,7 +125,15 @@ header.bar {
   top: 0;
   z-index: 20;
   padding: 14px 16px 0;
-  background: linear-gradient(var(--paper) 55%, transparent);
+}
+/* On the landing page the header sat in normal flow directly above .hero, so its own
+   fade-to-transparent background met the hero's differently-composed gradient at a hard,
+   visible seam. Instead the header is fully transparent and overlaps down into the hero
+   (negative margin pulls the hero's box up underneath it) so the hero's own background
+   continues unbroken behind the floating pill — .hero compensates with matching extra
+   top padding so the visible content position doesn't move. */
+header.bar:has(+ main .hero) {
+  margin-bottom: -70px;
 }
 .bar .wrap {
   display: flex;
@@ -305,7 +313,7 @@ header.bar {
   width: 100vw;
   margin-left: 50%;
   transform: translateX(-50%);
-  padding: 128px max(24px, calc((100vw - 1080px) / 2 + 24px)) 0;
+  padding: 198px max(24px, calc((100vw - 1080px) / 2 + 24px)) 0;
   text-align: center;
   background:
     radial-gradient(ellipse 620px 380px at 18% 0%, rgba(255, 77, 28, 0.24) 0%, transparent 60%),
