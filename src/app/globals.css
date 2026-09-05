@@ -111,7 +111,7 @@ header.bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 62px;
+  min-height: 62px;
   gap: 16px;
 }
 .brand {
@@ -126,9 +126,12 @@ header.bar {
   padding: 0;
   color: var(--ink);
   cursor: pointer;
+  white-space: nowrap;
+  flex: 0 0 auto;
 }
 .brand svg {
   display: block;
+  flex: 0 0 auto;
 }
 .who {
   font-size: 14px;
@@ -140,6 +143,36 @@ header.bar {
   border: 1px solid var(--line);
   border-radius: 999px;
   padding: 5px 12px 5px 5px;
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+/* The header used to just let "Internship Hub" and the who-chip wrap onto extra lines at
+   phone widths, which broke the fixed-height sticky bar — this compacts both instead. */
+@media (max-width: 480px) {
+  .brand {
+    font-size: 15px;
+    gap: 7px;
+  }
+  .brand svg {
+    width: 18px;
+    height: 18px;
+  }
+  .who {
+    font-size: 12.5px;
+    gap: 8px;
+    padding: 4px 10px 4px 4px;
+  }
+  .who-name {
+    display: none;
+  }
+  .who .linkbtn {
+    font-size: 12.5px;
+  }
+  .avatar {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+  }
 }
 .avatar {
   width: 26px;
@@ -1171,6 +1204,41 @@ footer {
   font-size: 13px;
   color: var(--ink-3);
 }
+
+/* Landing-only closing footer — the page used to just stop after the step cards with
+   nothing beneath it, which read as unfinished. */
+.site-footer {
+  margin-top: 40px;
+  padding: 28px 0;
+}
+.site-footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+}
+.site-footer-row .brand {
+  color: var(--ink-3);
+  font-size: 14px;
+  font-weight: 600;
+  flex: 0 0 auto;
+}
+.site-footer-row span {
+  font-size: 12.5px;
+  color: var(--ink-3);
+  max-width: 46ch;
+}
+.site-footer-row span:last-child {
+  margin-left: auto;
+  max-width: none;
+  white-space: nowrap;
+}
+@media (max-width: 700px) {
+  .site-footer-row span:last-child {
+    margin-left: 0;
+  }
+}
 @media (max-width: 640px) {
   .row {
     grid-template-columns: 42px 1fr;
@@ -1183,8 +1251,9 @@ footer {
     grid-column: 2;
     text-align: left;
     display: flex;
+    flex-wrap: wrap;
     align-items: baseline;
-    gap: 8px;
+    gap: 4px 8px;
   }
   .score b {
     font-size: 20px;

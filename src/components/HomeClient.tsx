@@ -212,14 +212,14 @@ function ContactModal({ listing, onClose }: { listing: ScoredListing; onClose: (
           </p>
           <pre className="email-draft">{fullText}</pre>
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <button className="btn sm" onClick={copyEmail}>
+              {copied ? "Copied!" : "Copy text"}
+            </button>
             {mailHref && (
               <a className="btn ghost sm" href={mailHref}>
                 Open in email app
               </a>
             )}
-            <button className="btn ghost sm" onClick={copyEmail}>
-              {copied ? "Copied!" : "Copy text"}
-            </button>
           </div>
         </div>
       </div>
@@ -764,6 +764,26 @@ export default function HomeClient() {
             </div>
           </div>
         </main>
+      )}
+
+      {view === "landing" && (
+        <footer className="site-footer">
+          <div className="wrap site-footer-row">
+            <button className="brand" onClick={() => go("landing")} aria-label="Internship Hub home">
+              <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M12 2C7.86 2 4.5 5.36 4.5 9.5c0 5.25 6.18 11.28 6.98 12.02a.78.78 0 0 0 1.04 0C13.32 20.78 19.5 14.75 19.5 9.5 19.5 5.36 16.14 2 12 2z"
+                  fill="var(--ink-3)"
+                />
+                <circle cx="12" cy="9.5" r="3.3" fill="var(--paper)" />
+                <circle cx="12" cy="9.5" r="1.4" fill="var(--ink-3)" />
+              </svg>
+              Internship Hub
+            </button>
+            <span>Not affiliated with any employer or business shown in results. Listings and businesses are pulled live, not vetted by us.</span>
+            <span>© {new Date().getFullYear()} Internship Hub</span>
+          </div>
+        </footer>
       )}
 
       {view === "auth" && (
