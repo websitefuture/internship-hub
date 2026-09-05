@@ -36,7 +36,7 @@ const TRANSIT_VS_DRIVE_MULTIPLIER = 2.3;
 const RELEVANCE_FLOOR_THRESHOLD = 0.4;
 const RELEVANCE_FLOOR_MIN = 0.5;
 
-function roleFit(roles: RoleKey[], listing: RawListing): number {
+function roleFit(roles: RoleKey[], customWords: string[], listing: RawListing): number {
   const title = listing.title.toLowerCase();
   const body = `${listing.category} ${listing.description}`.toLowerCase();
   let best = 0.15; // weak baseline rather than 0 — the search already filtered for "intern"
@@ -44,6 +44,12 @@ function roleFit(roles: RoleKey[], listing: RawListing): number {
     const words = ROLE_KEYWORDS[role];
     if (words.some((w) => title.includes(w))) best = Math.max(best, 1);
     else if (words.some((w) => body.includes(w))) best = Math.max(best, 0.6);
+  }
+  // "Something else" has no fixed keyword list — match whatever words the student typed
+  // themselves instead.
+  if (customWords.length) {
+    if (customWords.some((w) => title.includes(w))) best = Math.max(best, 1);
+    else if (customWords.some((w) => body.includes(w))) best = Math.max(best, 0.6);
   }
   return best;
 }
@@ -82,7 +88,12 @@ export function scoreLive(
   const maxMiles = parseFloat(a.max || "30");
   const baseTimeBudget = Math.max(4, (maxMiles / FALLBACK_MPH) * 60);
   const how = a.how || "drive";
-  const roles: RoleKey[] = a.role && a.role.length ? a.role : ["marketing"];
+  const pickedRoles = (a.role || []).filter((r): r is RoleKey => r !== "other");
+  const roles: RoleKey[] = a.role && a.role.length ? pickedRoles : ["marketing"];
+  const customWords = (a.roleOther || "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length > 2);
 
   const out: ScoredListing[] = listings.map((listing, i) => {
     const remote = listing.lat === null || listing.lng === null;
@@ -114,7 +125,7 @@ export function scoreLive(
       cs = t <= budget ? 1 - 0.5 * (t / budget) : Math.max(0, 0.5 - (t - budget) / budget);
     }
 
-    const fit = roleFit(roles, listing);
+    const fit = roleFit(roles, customWords, listing);
     const pay = payFit(a.pay, listing);
     const mode = modeFit(a.mode, listing.remoteGuess);
     let s = w.commute * cs + w.fit * fit + w.pay * pay + w.mode * mode;

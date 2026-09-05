@@ -41,6 +41,7 @@ export const QUESTIONS: Question[] = [
       ["healthcare", "Healthcare", "Clinics, hospitals, patient care"],
       ["hospitality", "Hospitality and food", "Restaurants, hotels, events, catering"],
       ["retail", "Retail and customer service", "Stores, customer-facing roles"],
+      ["other", "Something else", "Tell us in your own words"],
     ],
   },
   {

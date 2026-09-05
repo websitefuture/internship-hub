@@ -40,11 +40,11 @@ export async function POST(req: Request) {
   // email — every result here is a suggested outreach target, never a confirmed opening.
   if (answers.stage === "hs") {
     const radiusMiles = radiusMilesForAnswers(answers.max);
-    const roles: RoleKey[] = answers.role || [];
+    const roles: RoleKey[] = (answers.role || []).filter((r): r is RoleKey => r !== "other");
 
     let raw: RawListing[] = [];
     try {
-      raw = await fetchLocalBusinesses({ lat: loc.lat, lng: loc.lng, radiusMiles, roles, cityLabel });
+      raw = await fetchLocalBusinesses({ lat: loc.lat, lng: loc.lng, radiusMiles, roles, cityLabel, roleOther: answers.roleOther });
     } catch {
       return NextResponse.json({ results: [], coverage: true, coldOutreach: true, error: "Search failed" });
     }

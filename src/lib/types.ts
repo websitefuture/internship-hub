@@ -16,6 +16,10 @@ export interface Company {
 }
 
 export type RoleKey = "marketing" | "ops" | "eng" | "design" | "data" | "trades" | "healthcare" | "hospitality" | "retail";
+// The role question's "Something else" option — kept out of RoleKey (which drives fixed
+// keyword/OSM-tag lookups) since it carries no fixed category, only whatever free text the
+// student types into roleOther.
+export type RoleSelection = RoleKey | "other";
 export type PriorityKey = "commute" | "fit" | "pay";
 
 export interface LocationAnswer {
@@ -29,7 +33,8 @@ export interface Answers {
   loc?: LocationAnswer;
   max?: string; // "5" | "15" | "30" | "50"
   how?: "drive" | "driven" | "transit" | "none";
-  role?: RoleKey[];
+  role?: RoleSelection[];
+  roleOther?: string; // free text typed when "other" is selected in the role question
   stage?: "hs" | "ug" | "grad" | "other";
   mode?: "onsite" | "hybrid" | "remote";
   when?: "sum27" | "school" | "asap" | "flex";

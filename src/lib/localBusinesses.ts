@@ -199,10 +199,15 @@ export async function fetchLocalBusinesses(opts: {
   radiusMiles: number;
   roles: RoleKey[];
   cityLabel: string;
+  roleOther?: string;
 }): Promise<RawListing[]> {
   const filters = opts.roles.length ? opts.roles.flatMap((r) => ROLE_OSM_FILTERS[r] ?? []) : DEFAULT_FILTERS;
   const uniqueFilters = Array.from(new Set(filters.length ? filters : DEFAULT_FILTERS));
-  const roleLabel = opts.roles.length ? opts.roles.map((r) => ROLE_LABELS[r]).join("/") : "internship-style";
+  // "Something else" has no OSM tag of its own — the search still falls back to the
+  // fixed-category filters above, but the free text is worked into the label so the
+  // generated description honestly reflects what the student actually typed.
+  const roleNames = [...opts.roles.map((r) => ROLE_LABELS[r]), ...(opts.roleOther?.trim() ? [opts.roleOther.trim()] : [])];
+  const roleLabel = roleNames.length ? roleNames.join("/") : "internship-style";
 
   const query = buildQuery(opts.lat, opts.lng, opts.radiusMiles, uniqueFilters);
 

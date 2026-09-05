@@ -913,6 +913,20 @@ export default function HomeClient() {
               </div>
             )}
 
+            {currentQ.k === "role" && ((answers.role as string[] | undefined) || []).includes("other") && (
+              <div className="field" style={{ marginTop: -14, marginBottom: 26 }}>
+                <label htmlFor="roleOther">What is it?</label>
+                <input
+                  id="roleOther"
+                  type="text"
+                  placeholder="e.g. photography, veterinary work, journalism"
+                  autoComplete="off"
+                  value={answers.roleOther || ""}
+                  onChange={(e) => setAnswer("roleOther", e.target.value)}
+                />
+              </div>
+            )}
+
             <div className="nav">
               <button className="btn ghost" style={{ visibility: qIndex === 0 ? "hidden" : "visible" }} onClick={goBack} disabled={computing}>
                 Back
