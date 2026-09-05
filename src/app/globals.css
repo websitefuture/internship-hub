@@ -669,6 +669,7 @@ header.bar:has(+ main .hero) {
   display: flex;
   align-items: center;
   justify-content: center;
+  margin-bottom: 16px;
 }
 
 /* ---------- auth ---------- */
