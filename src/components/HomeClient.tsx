@@ -360,6 +360,32 @@ export default function HomeClient() {
     return () => window.removeEventListener("resize", resize);
   }, []);
 
+  // Mounts the scroll-craft engine (public/scrollcraft.js, loaded via next/script in
+  // layout.tsx) against the landing hero's data-sc-* markup: pointer tilt/spotlight on the
+  // mockup card, a magnetic pull on the CTA, and a fire-once reveal on the role chips and
+  // mockup. Re-runs each time the landing view remounts, since its data-sc-* elements are
+  // fresh DOM nodes the engine hasn't seen; the one accepted tradeoff is that scroll-craft
+  // has no unmount, so repeated visits to landing in one session add a harmless extra
+  // scroll/resize listener each time rather than replacing the old one.
+  useEffect(() => {
+    if (view !== "landing") return;
+    let cancelled = false;
+    let tries = 0;
+    const tryMount = () => {
+      if (cancelled) return;
+      const sc = (window as unknown as { ScrollCraft?: { mount: (root: Document) => void } }).ScrollCraft;
+      if (sc) {
+        sc.mount(document);
+        return;
+      }
+      if (tries++ < 40) setTimeout(tryMount, 100);
+    };
+    tryMount();
+    return () => {
+      cancelled = true;
+    };
+  }, [view]);
+
   useEffect(() => {
     if (status === "loading") return;
     if (status === "authenticated" && session.user) {
@@ -673,13 +699,13 @@ export default function HomeClient() {
                 Nine quick questions. We search real, live listings worldwide — or, for high schoolers, real nearby
                 businesses worth a cold pitch — and rank everything by how you&apos;d actually get there.
               </p>
-              <button className="btn" onClick={() => go(user ? "q" : "auth")}>
+              <button className="btn" data-sc-magnet="0.15" onClick={() => go(user ? "q" : "auth")}>
                 Get started
               </button>
               <div className="hero-note">Free. Two minutes. No internship experience required.</div>
             </div>
 
-            <div className="role-strip">
+            <div className="role-strip" data-sc-in data-sc-stagger="60">
               {["Marketing", "Engineering", "Design", "Data", "Trades", "Healthcare", "Hospitality", "Retail"].map((r) => (
                 <span key={r} className="role-chip">
                   {r}
@@ -687,8 +713,8 @@ export default function HomeClient() {
               ))}
             </div>
 
-            <div className="hero-mockup-wrap">
-              <div className="mockup-card" aria-hidden="true">
+            <div className="hero-mockup-wrap" data-sc-in>
+              <div className="mockup-card" data-sc-tilt="5" data-sc-spotlight aria-hidden="true">
                 <div className="mockup-titlebar">
                   <span className="mockup-dot" style={{ background: "#ff8577" }} />
                   <span className="mockup-dot" style={{ background: "#ffcf6b" }} />

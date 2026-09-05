@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Instrument_Sans } from "next/font/google";
+import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import Providers from "@/components/Providers";
 import "./globals.css";
@@ -22,6 +23,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body>
         <Providers>{children}</Providers>
         <Analytics />
+        <Script src="/scrollcraft.js" strategy="afterInteractive" />
       </body>
     </html>
   );

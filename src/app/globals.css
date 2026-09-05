@@ -1406,3 +1406,69 @@ footer {
     animation: none !important;
   }
 }
+
+/* ---------- scroll-craft (nateherkai/scroll-craft engine, light touch) ----------
+   Only the device rules the hero actually uses — data-sc-in (fire-once reveal),
+   data-sc-tilt/magnet/spotlight (pointer). Deliberately NOT importing the skill's
+   full scrollcraft.css: that file ships its own --sc-* token/reset layer (body
+   background, :focus-visible, ::selection, scrollbar theming) which would fight
+   this app's existing design tokens instead of extending them. The engine JS
+   itself (public/scrollcraft.js) is used unmodified, per the skill's own rule
+   that the engine is a mechanism and is never edited per project. */
+[data-sc-in] {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+  transition: opacity 620ms cubic-bezier(0.23, 1, 0.32, 1), transform 620ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-sc-in].sc-in {
+  opacity: 1;
+  transform: none;
+}
+[data-sc-stagger] > * {
+  opacity: 0;
+  transform: translate3d(0, 14px, 0);
+  transition: opacity 620ms cubic-bezier(0.23, 1, 0.32, 1), transform 620ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-sc-stagger] > .sc-in {
+  opacity: 1;
+  transform: none;
+}
+[data-sc-tilt] {
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+[data-sc-magnet] {
+  will-change: transform;
+}
+[data-sc-spotlight] {
+  isolation: isolate;
+  position: relative;
+}
+[data-sc-spotlight]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 2;
+  border-radius: inherit;
+  background: radial-gradient(
+    26rem 26rem at calc(var(--sc-mx, 0.5) * 100%) calc(var(--sc-my, 0.5) * 100%),
+    rgba(255, 77, 28, 0.16),
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 420ms ease;
+}
+[data-sc-spotlight]:hover::after {
+  opacity: 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  [data-sc-in],
+  [data-sc-stagger] > * {
+    transform: none;
+    transition-duration: 220ms;
+  }
+  [data-sc-spotlight]::after {
+    display: none;
+  }
+}
