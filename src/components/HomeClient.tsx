@@ -629,7 +629,7 @@ export default function HomeClient() {
               go("landing");
               e.currentTarget.blur();
             }}
-            aria-label="Internship Hub home"
+            aria-label="Internship Nest home"
           >
             {/* A location pin, not an abstract mark — the whole product is "find internships
                 near you," so the logo doubles as a tiny map pin with a glowing waypoint. */}
@@ -641,7 +641,7 @@ export default function HomeClient() {
               <circle cx="12" cy="9.5" r="3.3" fill="var(--paper)" />
               <circle cx="12" cy="9.5" r="1.4" fill="var(--lime)" />
             </svg>
-            Internship Hub
+            Internship Nest
           </button>
           {user && (
             <div className="who">
@@ -796,7 +796,7 @@ export default function HomeClient() {
               go("landing");
               e.currentTarget.blur();
             }}
-            aria-label="Internship Hub home"
+            aria-label="Internship Nest home"
           >
               <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
                 <path
@@ -806,10 +806,10 @@ export default function HomeClient() {
                 <circle cx="12" cy="9.5" r="3.3" fill="var(--paper)" />
                 <circle cx="12" cy="9.5" r="1.4" fill="var(--ink-3)" />
               </svg>
-              Internship Hub
+              Internship Nest
             </button>
             <span>Not affiliated with any employer or business shown in results. Listings and businesses are pulled live, not vetted by us.</span>
-            <span>© {new Date().getFullYear()} Internship Hub</span>
+            <span>© {new Date().getFullYear()} Internship Nest</span>
           </div>
         </footer>
       )}

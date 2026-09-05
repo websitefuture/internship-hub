@@ -4,7 +4,7 @@ import type { GeoResult } from "./types";
 // Usage policy requires an identifying User-Agent and asks for light traffic —
 // fine for this app's per-question search volume.
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
-const USER_AGENT = "InternshipHub/1.0 (+https://github.com/websitefuture/internship-hub)";
+const USER_AGENT = "InternshipNest/1.0 (+https://github.com/websitefuture/internship-hub)";
 
 interface NominatimAddress {
   city?: string;

@@ -10,9 +10,9 @@ const instrumentSans = Instrument_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Internship Hub — find internships you can actually get to",
+  title: "Internship Nest — find internships you can actually get to",
   description:
-    "Internship Hub ranks startups by how far they actually are from you, then by everything else.",
+    "Internship Nest ranks startups by how far they actually are from you, then by everything else.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
