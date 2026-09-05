@@ -318,6 +318,7 @@ export default function HomeClient() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [locMsg, setLocMsg] = useState<{ text: string; err?: boolean } | null>(null);
+  const [authMsg, setAuthMsg] = useState<string | null>(null);
   const [geoBusy, setGeoBusy] = useState(false);
   const [computing, setComputing] = useState(false);
   const [progressMsg, setProgressMsg] = useState("");
@@ -422,8 +423,21 @@ export default function HomeClient() {
 
   function createProfile() {
     const n = name.trim();
-    if (!n) return;
-    const u: UserProfile = { name: n, email: email.trim() };
+    // A single letter or a name with no actual letters in it ("a", "123") isn't a name —
+    // this is still just a local guest profile, not a real account, so the bar stays low,
+    // but it should at least look like someone typed a name.
+    const letterCount = (n.match(/[a-zA-Z]/g) || []).length;
+    if (letterCount < 2) {
+      setAuthMsg("Enter your actual name (at least a couple letters).");
+      return;
+    }
+    const em = email.trim();
+    if (em && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+      setAuthMsg("That email doesn't look right — fix it or leave it blank.");
+      return;
+    }
+    setAuthMsg(null);
+    const u: UserProfile = { name: n, email: em };
     setUser(u);
     save("profile", u);
     go("q", 0);
@@ -813,12 +827,33 @@ export default function HomeClient() {
 
                 <div className="field">
                   <label htmlFor="nm">Your name</label>
-                  <input id="nm" type="text" placeholder="Your name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
+                  <input
+                    id="nm"
+                    type="text"
+                    placeholder="Your name"
+                    autoComplete="name"
+                    value={name}
+                    onChange={(e) => {
+                      setName(e.target.value);
+                      if (authMsg) setAuthMsg(null);
+                    }}
+                  />
                 </div>
                 <div className="field">
                   <label htmlFor="em">Email</label>
-                  <input id="em" type="email" placeholder="you@example.com" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                  <input
+                    id="em"
+                    type="email"
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (authMsg) setAuthMsg(null);
+                    }}
+                  />
                 </div>
+                {authMsg && <div className="locstate err">{authMsg}</div>}
                 <button className="btn" style={{ width: "100%" }} onClick={createProfile}>
                   Continue without an account
                 </button>
