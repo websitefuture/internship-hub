@@ -45,18 +45,28 @@ body {
   padding: 0;
 }
 body {
-  /* A faint version of the hero's dot texture, carried through the whole app instead of
-     stopping dead at the hero's edge — otherwise every screen past the hero reads as flat
-     and the "flashy" identity only exists on the landing page. */
-  background:
-    radial-gradient(circle, rgba(255, 255, 255, 0.045) 1px, transparent 1px) 0 0 / 28px 28px,
-    radial-gradient(ellipse 900px 500px at 50% -10%, rgba(255, 77, 28, 0.05) 0%, transparent 60%), var(--paper);
+  /* A soft accent glow carried through the whole app instead of stopping dead at the
+     hero's edge — otherwise every screen past the hero reads as flat and the "flashy"
+     identity only exists on the landing page. */
+  background: radial-gradient(ellipse 900px 500px at 50% -10%, rgba(255, 77, 28, 0.05) 0%, transparent 60%), var(--paper);
   background-attachment: fixed;
   color: var(--ink);
   font-family: var(--font-instrument-sans), system-ui, -apple-system, sans-serif;
   font-size: 16px;
   line-height: 1.55;
   -webkit-font-smoothing: antialiased;
+}
+/* Film-grain overlay, the Raycast/Framer trick that keeps a flat dark surface from
+   reading as dead-flat — a fixed, non-interactive layer so it never affects layout or
+   scrolls independently of the page. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 .wrap {
   max-width: 1080px;
@@ -72,7 +82,7 @@ h3 {
   line-height: 1.12;
 }
 h1 {
-  font-size: clamp(42px, 5.6vw, 68px);
+  font-size: clamp(44px, 6.2vw, 78px);
   font-weight: 800;
   letter-spacing: -0.04em;
 }
@@ -106,19 +116,30 @@ button {
 }
 
 /* ---------- shell ---------- */
+/* A floating capsule nav instead of a full-width bordered bar — modeled on Raycast's
+   detached, blurred pill header, which reads as more considered than a bar pinned flush
+   to the viewport edge. The outer element stays transparent and full-width so content
+   scrolls visibly behind it; the pill itself carries the background/border/blur. */
 header.bar {
-  border-bottom: 1px solid var(--line);
-  background: var(--paper);
   position: sticky;
   top: 0;
   z-index: 20;
+  padding: 14px 16px 0;
+  background: linear-gradient(var(--paper) 55%, transparent);
 }
 .bar .wrap {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  min-height: 62px;
+  min-height: 54px;
   gap: 16px;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 10px 8px 20px;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: var(--shadow-sm);
 }
 .brand {
   display: flex;
@@ -284,7 +305,7 @@ header.bar {
   width: 100vw;
   margin-left: 50%;
   transform: translateX(-50%);
-  padding: 88px max(24px, calc((100vw - 1080px) / 2 + 24px)) 0;
+  padding: 128px max(24px, calc((100vw - 1080px) / 2 + 24px)) 0;
   text-align: center;
   background:
     radial-gradient(ellipse 620px 380px at 18% 0%, rgba(255, 77, 28, 0.24) 0%, transparent 60%),
@@ -300,7 +321,6 @@ header.bar {
 }
 .hero h1 {
   color: #fff;
-  text-transform: uppercase;
 }
 .hero .accent-text {
   color: var(--lime);
