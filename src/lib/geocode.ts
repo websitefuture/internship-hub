@@ -1,7 +1,7 @@
 import type { GeoResult } from "./types";
 
 // Free worldwide geocoding via OpenStreetMap's Nominatim (no API key, no billing).
-// Usage policy requires an identifying User-Agent and asks for light traffic —
+// Usage policy requires an identifying User-Agent and asks for light traffic
 // fine for this app's per-question search volume.
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
 const USER_AGENT = "InternshipNest/1.0 (+https://github.com/websitefuture/internship-hub)";

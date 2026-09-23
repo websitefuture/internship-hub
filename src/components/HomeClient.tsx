@@ -42,7 +42,7 @@ function Pill({ d, lim }: { d: number | null; lim: number }) {
   return <span className={`pill ${cls}`}>{Math.round(d)} mi</span>;
 }
 
-// Deterministic pastel avatar (color + initial) for a company/business name — same palette
+// Deterministic pastel avatar (color + initial) for a company/business name, same palette
 // family as the near/mid/far distance colors plus two extras so cards don't all look alike.
 const AVATAR_PALETTE = [
   { bg: "#FFE4D6", fg: "#E0400F" },
@@ -98,9 +98,9 @@ function draftEmail(c: ScoredListing): { subject: string; body: string } {
       subject: `Local student interested in ${c.company}`,
       body: `Hi ${c.company} team,
 
-My name is [Your Name], a [grade] student at [Your School]. I came across ${c.company} while looking for ${c.category.toLowerCase()} opportunities near ${c.locationLabel}, and I'd love the chance to intern, shadow, or help out — even informally, part-time, or unpaid to start.
+My name is [Your Name], a [grade] student at [Your School]. I came across ${c.company} while looking for ${c.category.toLowerCase()} opportunities near ${c.locationLabel}, and I'd love the chance to intern, shadow, or help out, even informally, part-time, or unpaid to start.
 
-[A sentence or two on why this business specifically interests you, and any relevant skills or coursework — personalize this before sending.]
+[A sentence or two on why this business specifically interests you, and any relevant skills or coursework. Personalize this before sending.]
 
 Would you be open to a short conversation about whether there's any way I could help out? I'm available [your availability] and can come by in person if that's easier.
 
@@ -115,7 +115,7 @@ Thank you for your time,
 
 My name is [Your Name], and I'm interested in the ${c.title} role near ${c.locationLabel}.
 
-[A sentence or two on why you're a good fit — personalize this before sending.]
+[A sentence or two on why you're a good fit. Personalize this before sending.]
 
 I've attached my resume for your review. Please let me know if you need anything else from me.
 
@@ -164,7 +164,7 @@ function ContactModal({ listing, onClose }: { listing: ScoredListing; onClose: (
           {listing.coldOutreach ? (
             <>
               <p className="note" style={{ marginBottom: 8 }}>
-                {listing.company} has no posted opening — this is a business we think fits what you&apos;re looking
+                {listing.company} has no posted opening. This is a business we think fits what you&apos;re looking
                 for, not a confirmed job. Reach out directly using whichever of these they have:
               </p>
               <p className="desc">
@@ -190,7 +190,7 @@ function ContactModal({ listing, onClose }: { listing: ScoredListing; onClose: (
                   </>
                 )}
                 {!listing.contactEmail && !listing.phone && !listing.websiteUrl && (
-                  <>No phone, website, or email on file — try visiting in person or searching for {listing.company} online.</>
+                  <>No phone, website, or email on file. Try visiting in person or searching for {listing.company} online.</>
                 )}
               </p>
             </>
@@ -200,7 +200,7 @@ function ContactModal({ listing, onClose }: { listing: ScoredListing; onClose: (
             </p>
           ) : (
             <p className="note">
-              This listing doesn&apos;t include a direct apply link or a contact email — we&apos;re not going to
+              This listing doesn&apos;t include a direct apply link or a contact email. We&apos;re not going to
               guess one. Try searching for {listing.company}&apos;s own careers page or LinkedIn.
             </p>
           )}
@@ -209,7 +209,7 @@ function ContactModal({ listing, onClose }: { listing: ScoredListing; onClose: (
         <div className="contact-block">
           <h3>Sample email</h3>
           <p className="note" style={{ marginBottom: 8 }}>
-            A starting point — personalize it before sending.
+            A starting point. Personalize it before sending.
           </p>
           <pre className="email-draft">{fullText}</pre>
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
@@ -272,7 +272,7 @@ function ResultRow({
       <div className="score">
         <b>{c.s}</b>
         <span>of 100</span>
-        <span className="applyhint">{c.url ? "Apply ↗" : c.coldOutreach ? "Pitch →" : "Contact →"}</span>
+        <span className="applyhint">{c.url ? "Apply" : c.coldOutreach ? "Pitch" : "Contact"}</span>
       </div>
     </>
   );
@@ -439,7 +439,7 @@ export default function HomeClient() {
   }, [status, session]);
 
   // Right-to-delete, promised in the privacy policy. Two steps so a stray click can't wipe a
-  // saved shortlist. Only shown when signed in — a guest's data never leaves their browser,
+  // saved shortlist. Only shown when signed in, a guest's data never leaves their browser,
   // so "Change answers" and clearing site data already cover them.
   const [delState, setDelState] = useState<"idle" | "confirm" | "working" | "done" | "err">("idle");
 
@@ -466,7 +466,7 @@ export default function HomeClient() {
 
   function createProfile() {
     const n = name.trim();
-    // A single letter or a name with no actual letters in it ("a", "123") isn't a name —
+    // A single letter or a name with no actual letters in it ("a", "123") isn't a name
     // this is still just a local guest profile, not a real account, so the bar stays low,
     // but it should at least look like someone typed a name.
     const letterCount = (n.match(/[a-zA-Z]/g) || []).length;
@@ -476,7 +476,7 @@ export default function HomeClient() {
     }
     const em = email.trim();
     if (em && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
-      setAuthMsg("That email doesn't look right — fix it or leave it blank.");
+      setAuthMsg("That email doesn't look right. Fix it or leave it blank.");
       return;
     }
     setAuthMsg(null);
@@ -618,7 +618,7 @@ export default function HomeClient() {
         save("results", computed);
       }
     } catch {
-      setQHint("Search failed — check your connection and try again.");
+      setQHint("Search failed. Check your connection and try again.");
     } finally {
       clearInterval(stageTimer);
       setComputing(false);
@@ -635,7 +635,7 @@ export default function HomeClient() {
 
   // High-school results are capped to a much tighter real search radius (see
   // radiusMilesForAnswers) than the raw "how far will you travel" answer, which is also used
-  // to weight commute scoring for regular listings — so distance bands/rings need this instead
+  // to weight commute scoring for regular listings, so distance bands/rings need this instead
   // of the raw answer, or a "within 30 miles" stat card would be shown when every result is
   // actually within 10.
   const effectiveLim =
@@ -674,7 +674,7 @@ export default function HomeClient() {
             }}
             aria-label="Internship Nest home"
           >
-            {/* A location pin, not an abstract mark — the whole product is "find internships
+            {/* A location pin, not an abstract mark. The whole product is "find internships
                 near you," so the logo doubles as a tiny map pin with a glowing waypoint. */}
             <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
               <path
@@ -703,130 +703,113 @@ export default function HomeClient() {
       {view === "landing" && (
         <main className="wrap">
           <section className="hero">
-            <div className="hero-text">
-              <div className="kicker">
-                <span className="dotpulse" /> For students looking for their first internship
-              </div>
-              <h1>
-                Internships you can
-                <br />
-                actually <span className="accent-text">get to.</span>
-              </h1>
-              <p className="hero-sub">
-                Nine quick questions. We search real, live listings across 18 countries — or, for high schoolers, real nearby
-                businesses worth a cold pitch — and rank everything by how you&apos;d actually get there.
-              </p>
-              <button className="btn" data-sc-magnet="0.15" onClick={() => go(user ? "q" : "auth")}>
-                Get started
-              </button>
-              <div className="hero-note">Free. Two minutes. No internship experience required.</div>
-            </div>
-
-            <div className="role-strip" data-sc-in data-sc-stagger="60">
-              {["Marketing", "Engineering", "Design", "Data", "Trades", "Healthcare", "Hospitality", "Retail"].map((r) => (
-                <span key={r} className="role-chip">
-                  {r}
-                </span>
-              ))}
-            </div>
-
-            <div className="hero-mockup-wrap" data-sc-in>
-              <div className="mockup-card" data-sc-tilt="5" data-sc-spotlight aria-hidden="true">
-                <div className="mockup-titlebar">
-                  <span className="mockup-dot" style={{ background: "#ff8577" }} />
-                  <span className="mockup-dot" style={{ background: "#ffcf6b" }} />
-                  <span className="mockup-dot" style={{ background: "#7ee2a8" }} />
-                  <span className="mockup-titletext">Your shortlist</span>
+            <div className="hero-grid">
+              <div className="hero-text">
+                <p className="hero-eyebrow">For students looking for their first internship</p>
+                <h1>
+                  Internships you can actually <span className="accent-text">get to.</span>
+                </h1>
+                <p className="hero-sub">
+                  Nine quick questions, then we search live listings across 18 countries and rank them by how you
+                  would actually get there. High schoolers get real nearby businesses worth pitching instead.
+                </p>
+                <div className="hero-cta">
+                  <button className="btn" onClick={() => go(user ? "q" : "auth")}>
+                    Get started
+                  </button>
+                  <span className="hero-note">Free, takes two minutes, no account needed.</span>
                 </div>
-                <div className="mockup-body">
-                  <div className="mockup-stats">
-                    <div className="mockup-stat">
-                      <b>34</b>
-                      <span>Total matches</span>
-                    </div>
-                    <div className="mockup-stat">
-                      <b>21</b>
-                      <span>Within range</span>
-                    </div>
-                    <div className="mockup-stat">
-                      <b>6</b>
-                      <span>A stretch</span>
-                    </div>
-                    <div className="mockup-stat pop">
-                      <b>92</b>
-                      <span>Best score</span>
-                    </div>
-                  </div>
-                  {[
-                    { n: "Nova Robotics", role: "Engineering intern", d: "2 mi", s: 92 },
-                    { n: "Fernview Studio", role: "Marketing intern", d: "4 mi", s: 89 },
-                    { n: "BrightPath Clinic", role: "Healthcare intern", d: "1 mi", s: 85 },
-                  ].map((r) => (
-                    <div className="mockup-row" key={r.n}>
-                      <span className="mockup-avatar" style={avatarStyle(r.n)}>
-                        {initial(r.n)}
-                      </span>
-                      <span className="mockup-row-text">
-                        <b>{r.role}</b>
-                        <span>
-                          {r.n} · {r.d}
-                        </span>
-                      </span>
-                      <span className="mockup-score">{r.s}</span>
-                    </div>
+                <div className="role-strip" data-sc-in data-sc-stagger="60">
+                  {["Marketing", "Engineering", "Design", "Data", "Trades", "Healthcare", "Hospitality", "Retail"].map((r) => (
+                    <span key={r} className="role-chip">
+                      {r}
+                    </span>
                   ))}
                 </div>
               </div>
-              <div className="float-badge a">📍 Ranked by real distance</div>
-              <div className="float-badge b">✉️ Ready-to-send outreach email</div>
+
+              <div className="hero-mockup-wrap" data-sc-in>
+                <div className="mockup-card" aria-hidden="true">
+                  <div className="mockup-titlebar">
+                    <span className="mockup-step">Question 2 of 9</span>
+                  </div>
+                  <div className="mockup-body">
+                    <p className="mockup-q">How far are you willing to travel?</p>
+                    <p className="mockup-qsub">Each way, on a normal day.</p>
+                    {[
+                      ["Under 5 miles", "Walking or a short bike ride", false],
+                      ["Up to 15 miles", "A 20 to 30 minute drive", true],
+                      ["Up to 30 miles", "A real commute, but doable", false],
+                      ["50 miles or more", "I'll travel if the role is right", false],
+                    ].map(([label, sub, on]) => (
+                      <div className={`mockup-opt${on ? " on" : ""}`} key={label as string}>
+                        <span className="mockup-tick" />
+                        <span>
+                          <b>{label}</b>
+                          <span>{sub}</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="float-badge">Ranked by real drive time</div>
+              </div>
             </div>
           </section>
 
-          <div className="steps">
+          <section className="steps">
             <div className="steps-head">
               <h2>How it works</h2>
-              <p>No login required to try it, no recruiter spam after.</p>
+              <p>No login required to try it, and no recruiter spam afterwards.</p>
             </div>
-            <div className="step-grid">
-              <div className="step-card">
-                <div className="step-num">STEP 01</div>
-                <div className="ficon" style={{ background: "var(--accent-soft)" }}>
-                  <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <path d="M4 6h12M4 10h12M4 14h8" stroke="var(--accent-2)" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
+            <ol className="step-list">
+              <li className="step-row">
+                <span className="step-figure">1</span>
+                <div className="step-body">
+                  <h3>Answer nine quick questions</h3>
+                  <p>
+                    Where you are, how far you will go, how you get there, and what you want to do. It takes about two
+                    minutes.
+                  </p>
                 </div>
-                <h3>Answer nine quick questions</h3>
-                <p>Where you are, how far you&apos;ll go, how you get there, and what you want to do. Two minutes.</p>
-              </div>
-              <div className="step-card">
-                <div className="step-num">STEP 02</div>
-                <div className="ficon" style={{ background: "var(--lime-soft)" }}>
-                  <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <circle cx="10" cy="10" r="7.5" stroke="var(--lime-ink)" strokeWidth="2" />
-                    <path d="M2.5 10h15M10 2.5c2.5 2 2.5 13 0 15M10 2.5c-2.5 2-2.5 13 0 15" stroke="var(--lime-ink)" strokeWidth="1.4" />
-                  </svg>
+              </li>
+              <li className="step-row">
+                <span className="step-figure">2</span>
+                <div className="step-body">
+                  <h3>We search live listings</h3>
+                  <p>
+                    Real internship listings, ranked by distance and fit. High schoolers get real nearby businesses
+                    worth pitching, because formal postings open to them barely exist.
+                  </p>
                 </div>
-                <h3>We search live listings</h3>
-                <p>Real internship listings ranked by distance and fit — or, for high schoolers, real nearby businesses worth pitching.</p>
-              </div>
-              <div className="step-card">
-                <div className="step-num">STEP 03</div>
-                <div className="ficon" style={{ background: "var(--line-2)" }}>
-                  <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                    <path
-                      d="M10 18s6-5.2 6-9.6A6 6 0 0 0 4 8.4C4 12.8 10 18 10 18Z"
-                      stroke="var(--ink-2)"
-                      strokeWidth="2"
-                      strokeLinejoin="round"
-                    />
-                    <circle cx="10" cy="8.4" r="2" stroke="var(--ink-2)" strokeWidth="2" />
-                  </svg>
+              </li>
+              <li className="step-row">
+                <span className="step-figure">3</span>
+                <div className="step-body">
+                  <h3>Get a ranked shortlist</h3>
+                  <p>
+                    Apply directly, or open a drafted outreach email you can personalise for a business with no posted
+                    opening.
+                  </p>
                 </div>
-                <h3>Get a ranked shortlist</h3>
-                <p>Apply directly, or use a ready-to-personalize outreach email for businesses with no posted opening.</p>
-              </div>
+              </li>
+            </ol>
+          </section>
+
+          <section className="facts">
+            <div className="fact">
+              <b>18</b>
+              <span>countries with live listing coverage</span>
             </div>
-          </div>
+            <div className="fact">
+              <b>0</b>
+              <span>accounts required to run a search</span>
+            </div>
+            <div className="fact">
+              <b>9</b>
+              <span>questions between you and a shortlist</span>
+            </div>
+          </section>
         </main>
       )}
 
@@ -919,7 +902,7 @@ export default function HomeClient() {
                   Continue without an account
                 </button>
                 <p className="note" style={{ marginTop: 14 }}>
-                  Saved in this browser only — not tied to an account, and won&apos;t follow you to another device.
+                  Saved in this browser only, not tied to an account, and won&apos;t follow you to another device.
                 </p>
                 <p className="note consent-note">
                   By continuing, either way, you agree to our <Link href="/terms">Terms</Link> and{" "}
@@ -933,20 +916,28 @@ export default function HomeClient() {
                 <h3>What you get</h3>
                 <ul className="check-list">
                   <li>
-                    <span className="checkdot">✓</span>
-                    Real, live listings searched the moment you finish — not a stale database.
+                    <svg className="checkdot" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M3 8.6l3.1 3L13 4.8" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    Real, live listings searched the moment you finish, not a stale database.
                   </li>
                   <li>
-                    <span className="checkdot">✓</span>
+                    <svg className="checkdot" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M3 8.6l3.1 3L13 4.8" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
                     Everything ranked by how you&apos;d actually get there: drive, ride, transit, or remote.
                   </li>
                   <li>
-                    <span className="checkdot">✓</span>
-                    High schoolers get real nearby businesses to cold-pitch, with a ready-to-send email — not fake
+                    <svg className="checkdot" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M3 8.6l3.1 3L13 4.8" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                    High schoolers get real nearby businesses to cold-pitch, with a ready-to-send email, not fake
                     listings that require a college degree.
                   </li>
                   <li>
-                    <span className="checkdot">✓</span>
+                    <svg className="checkdot" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M3 8.6l3.1 3L13 4.8" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
                     One click to apply, or a drafted email when there&apos;s no application link.
                   </li>
                 </ul>
@@ -1073,13 +1064,13 @@ export default function HomeClient() {
                     ? `${results.length} real businesses within ${effectiveLim} miles of ${hsCity || answers.loc!.label}.`
                     : coverage
                       ? `${results.length} live listings ranked from ${answers.loc!.label}.`
-                      : `We don't have live coverage for ${answers.loc!.label} yet — coverage today is the US, UK, Canada, Australia, and about a dozen more countries, mostly in Europe.`}
+                      : `We don't have live coverage for ${answers.loc!.label} yet. Coverage today is the US, UK, Canada, Australia, and about a dozen more countries, mostly in Europe.`}
                 </p>
                 {answers.stage === "hs" && (
                   <p className="note" style={{ marginTop: 4 }}>
                     Real internships open to high schoolers are almost nonexistent as formal job postings, so instead
                     of listings, these are actual nearby businesses matched to what you&apos;re interested in. None
-                    of them have a posted opening — tap one for the full pitch and a sample cold email.
+                    of them have a posted opening. Tap one for the full pitch and a sample cold email.
                   </p>
                 )}
               </div>
@@ -1104,7 +1095,7 @@ export default function HomeClient() {
                     </>
                   ) : (
                     <button className="btn ghost sm" onClick={() => setDelState("confirm")}>
-                      {delState === "err" ? "Delete failed — retry" : "Delete my saved data"}
+                      {delState === "err" ? "Delete failed. Retry" : "Delete my saved data"}
                     </button>
                   ))}
               </div>
@@ -1159,7 +1150,7 @@ export default function HomeClient() {
               <div className="list">
                 <div className="empty">
                   {answers.stage === "hs"
-                    ? "Couldn't find nearby businesses matching this — try widening the distance on question 2, or a bigger nearby city."
+                    ? "Couldn't find nearby businesses matching this. Try widening the distance on question 2, or a bigger nearby city."
                     : !coverage
                       ? "Try a city in a country we have live coverage for."
                       : "Nothing matched. Try widening the distance on question 2, or a bigger nearby city."}
@@ -1176,17 +1167,17 @@ export default function HomeClient() {
           {answers.stage === "hs" ? (
             <>
               High-school results come from OpenStreetMap&apos;s real, open business data, re-fetched every time you
-              run the questionnaire — not a static dataset. None of these businesses posted an opening; every one is
+              run the questionnaire, not a static dataset. None of these businesses posted an opening; every one is
               a suggested cold-outreach target based on distance and your stated interests, not a confirmed job.
               Contact details (phone, website, email) are whatever that business has published publicly and may be
-              out of date — double-check before reaching out.
+              out of date. Double-check before reaching out.
             </>
           ) : (
             <>
-              Listings come from a live jobs-search API and are re-fetched every time you run the questionnaire — not
+              Listings come from a live jobs-search API and are re-fetched every time you run the questionnaire, not
               a static dataset. Distance uses the listing&apos;s stated location, with a real driving route where we
               could get one and a straight-line estimate otherwise. &quot;Remote / hybrid / in person&quot; and pay
-              are read from the listing text automatically and can be wrong — check the actual posting before you
+              are read from the listing text automatically and can be wrong. Check the actual posting before you
               apply. Live coverage is currently limited to a set of countries, mostly the US, UK, Canada, Australia,
               and Western Europe.
             </>

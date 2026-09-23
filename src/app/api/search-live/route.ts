@@ -19,7 +19,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing location" }, { status: 400 });
   }
 
-  // Reverse-geocode server-side so we always search with a real place name —
+  // Reverse-geocode server-side so we always search with a real place name
   // "your current location" (the label from the browser geolocation path) would
   // otherwise be sent straight to the jobs API as junk search text.
   let countryCode = "";
@@ -37,7 +37,7 @@ export async function POST(req: Request) {
   // returns thousands of college/grad-targeted programs; "high school intern" returns
   // almost nothing real). So instead of searching job postings, this finds real nearby
   // businesses (via OpenStreetMap) that fit the student's interests and drafts a cold-pitch
-  // email — every result here is a suggested outreach target, never a confirmed opening.
+  // email, every result here is a suggested outreach target, never a confirmed opening.
   if (answers.stage === "hs") {
     const radiusMiles = radiusMilesForAnswers(answers.max);
     const roles: RoleKey[] = (answers.role || []).filter((r): r is RoleKey => r !== "other");

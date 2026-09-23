@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 :root {
-  /* Full dark theme — the hero used to be the only dark section; now the whole app (header,
+  /* Full dark theme, the hero used to be the only dark section; now the whole app (header,
      cards, results, auth) shares one near-black surface system instead of switching to white
      past the hero, which was the "everything looks like a million different things" problem
      applied to light/dark instead of hue. */
@@ -14,7 +14,7 @@
   --line-2: #1b1f1c;
 
   /* One loud primary (electric orange) + one sparingly-used secondary (electric lime) +
-     neutrals — replacing the old orange/green/amber/red four-hue system, which is what was
+     neutrals, replacing the old orange/green/amber/red four-hue system, which is what was
      reading as "a million different things." near/mid/far now vary the ONE accent's intensity
      instead of switching hue. */
   --accent: #ff4d1c;
@@ -30,11 +30,12 @@
   --far: #40453f;
   --focus: var(--accent);
 
-  --r: 16px;
+  --r: 12px;
   --r-sm: 10px;
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25), 0 1px 1px rgba(0, 0, 0, 0.15);
   --shadow-md: 0 10px 28px rgba(0, 0, 0, 0.35), 0 2px 6px rgba(0, 0, 0, 0.2);
   --shadow-lg: 0 30px 70px rgba(0, 0, 0, 0.5), 0 8px 20px rgba(0, 0, 0, 0.3);
+  --ring-warm: 0 0 0 1px rgba(255, 122, 74, 0.16);
 }
 * {
   box-sizing: border-box;
@@ -46,7 +47,7 @@ body {
 }
 body {
   /* A soft accent glow carried through the whole app instead of stopping dead at the
-     hero's edge — otherwise every screen past the hero reads as flat and the "flashy"
+     hero's edge, otherwise every screen past the hero reads as flat and the "flashy"
      identity only exists on the landing page. */
   background: radial-gradient(ellipse 900px 500px at 50% -10%, rgba(255, 77, 28, 0.05) 0%, transparent 60%), var(--paper);
   background-attachment: fixed;
@@ -57,7 +58,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 /* Film-grain overlay, the Raycast/Framer trick that keeps a flat dark surface from
-   reading as dead-flat — a fixed, non-interactive layer so it never affects layout or
+   reading as dead-flat, a fixed, non-interactive layer so it never affects layout or
    scrolls independently of the page. */
 body::before {
   content: "";
@@ -82,7 +83,7 @@ h3 {
   line-height: 1.12;
 }
 h1 {
-  font-size: clamp(44px, 6.2vw, 78px);
+  font-size: clamp(36px, 5.4vw, 66px);
   font-weight: 800;
   letter-spacing: -0.04em;
 }
@@ -90,7 +91,9 @@ h1 {
   color: var(--accent);
 }
 h2 {
-  font-size: clamp(24px, 3.4vw, 32px);
+  font-size: clamp(28px, 4vw, 44px);
+  font-weight: 800;
+  letter-spacing: -0.032em;
 }
 h3 {
   font-size: 19px;
@@ -116,7 +119,7 @@ button {
 }
 
 /* ---------- shell ---------- */
-/* A floating capsule nav instead of a full-width bordered bar — modeled on Raycast's
+/* A floating capsule nav instead of a full-width bordered bar, modeled on Raycast's
    detached, blurred pill header, which reads as more considered than a bar pinned flush
    to the viewport edge. The outer element stays transparent and full-width so content
    scrolls visibly behind it; the pill itself carries the background/border/blur. */
@@ -130,7 +133,7 @@ header.bar {
    fade-to-transparent background met the hero's differently-composed gradient at a hard,
    visible seam. Instead the header is fully transparent and overlaps down into the hero
    (negative margin pulls the hero's box up underneath it) so the hero's own background
-   continues unbroken behind the floating pill — .hero compensates with matching extra
+   continues unbroken behind the floating pill, .hero compensates with matching extra
    top padding so the visible content position doesn't move. */
 header.bar:has(+ main .hero) {
   margin-bottom: -70px;
@@ -143,8 +146,8 @@ header.bar:has(+ main .hero) {
   gap: 16px;
   background: color-mix(in srgb, var(--card) 88%, transparent);
   border: 1px solid var(--line);
-  border-radius: 999px;
-  padding: 8px 10px 8px 20px;
+  border-radius: 13px;
+  padding: 8px 10px 8px 18px;
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   box-shadow: var(--shadow-sm);
@@ -176,13 +179,13 @@ header.bar:has(+ main .hero) {
   gap: 10px;
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: 9px;
   padding: 5px 12px 5px 5px;
   white-space: nowrap;
   flex: 0 0 auto;
 }
 /* The header used to just let "Internship Hub" and the who-chip wrap onto extra lines at
-   phone widths, which broke the fixed-height sticky bar — this compacts both instead. */
+   phone widths, which broke the fixed-height sticky bar, this compacts both instead. */
 @media (max-width: 480px) {
   .brand {
     font-size: 15px;
@@ -241,8 +244,8 @@ header.bar:has(+ main .hero) {
   border: 1px solid var(--accent);
   background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 100%, #fff 14%) 0%, var(--accent) 55%, var(--accent-2) 100%);
   color: #fff;
-  padding: 18px 34px;
-  border-radius: 999px;
+  padding: 16px 30px;
+  border-radius: 10px;
   font-weight: 700;
   font-size: 17px;
   letter-spacing: -0.01em;
@@ -302,10 +305,10 @@ header.bar:has(+ main .hero) {
     transform: none;
   }
 }
-/* Full-bleed hero — breaks out of the centered .wrap it sits inside via the
+/* Full-bleed hero, breaks out of the centered .wrap it sits inside via the
    100vw/-50%-translate trick, then repads itself so the content still lines up with the
    1080px column. Modeled on the dark-hero-plus-one-neon-accent pattern used by Handshake
-   (joinhandshake.com) and Ramp (ramp.com) — both ditch a soft multi-hue palette for near-black
+   (joinhandshake.com) and Ramp (ramp.com), both ditch a soft multi-hue palette for near-black
    plus a single electric color, which is what actually reads as "flashy" rather than "busy."
    The rest of the app is now the same near-black as this section (see :root), so the hero
    only needs its own radial glows layered on --paper, not a separate background color. */
@@ -313,8 +316,8 @@ header.bar:has(+ main .hero) {
   width: 100vw;
   margin-left: 50%;
   transform: translateX(-50%);
-  padding: 198px max(24px, calc((100vw - 1080px) / 2 + 24px)) 0;
-  text-align: center;
+  padding: 176px max(24px, calc((100vw - 1140px) / 2 + 24px)) 0;
+  text-align: left;
   background:
     radial-gradient(ellipse 620px 380px at 18% 0%, rgba(255, 77, 28, 0.24) 0%, transparent 60%),
     radial-gradient(ellipse 500px 320px at 88% 10%, rgba(215, 255, 63, 0.12) 0%, transparent 55%),
@@ -332,269 +335,301 @@ header.bar:has(+ main .hero) {
 }
 .hero .accent-text {
   color: var(--lime);
+  /* Keeps "get to." on one line. Without it the headline breaks after "get" and leaves
+     "to." alone on a third line, which is the most visible kind of typographic orphan. */
+  white-space: nowrap;
 }
-.kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  color: #fff;
-  font-weight: 700;
-  font-size: 13px;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  margin-bottom: 24px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  padding: 6px 15px 6px 11px;
-  border-radius: 999px;
-}
-.kicker .dotpulse {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--lime);
-  display: inline-block;
-  box-shadow: 0 0 8px 1px rgba(215, 255, 63, 0.7);
+/* Small label above the headline. Deliberately not an uppercase pill eyebrow: normal
+   sentence case, accent colour, no chrome, so it reads as a line of type rather than a
+   badge component. */
+.hero-eyebrow {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--accent-2);
+  margin: 0 0 18px;
+  letter-spacing: -0.005em;
 }
 .hero-sub {
-  font-size: 18px;
+  font-size: 19px;
+  line-height: 1.6;
   color: rgba(255, 255, 255, 0.72);
-  max-width: 50ch;
-  margin: 20px auto 0;
+  max-width: 48ch;
+  margin: 22px 0 0;
 }
-.hero .btn {
-  margin-top: 30px;
-  box-shadow: 0 0 0 0 transparent;
-}
-.hero .btn:hover {
-  box-shadow: var(--shadow-md), 0 0 40px rgba(255, 77, 28, 0.35);
+.hero-cta {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 32px;
 }
 .hero-note {
-  margin-top: 14px;
-  font-size: 13px;
+  font-size: 13.5px;
   color: rgba(255, 255, 255, 0.5);
 }
 
-/* role chip strip */
+/* Two-column hero. The old layout centred every element in one column, which is the
+   single most recognisable generated-landing silhouette; an asymmetric split with the
+   product preview bleeding off the right edge reads as a designed page instead. */
+.hero-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.08fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 56px;
+  padding-bottom: 104px;
+}
+.hero-text {
+  max-width: 560px;
+}
+
+/* role chips */
 .role-strip {
   display: flex;
-  justify-content: center;
   flex-wrap: wrap;
-  gap: 8px;
-  margin: 40px auto 0;
-  max-width: 680px;
-  /* Reveal now owned by data-sc-in (scroll-craft) — a plain "both"-fill CSS animation
-     here would win the cascade over [data-sc-in]'s opacity:0 and show the chips
-     immediately regardless of scroll position, silently defeating the scroll trigger. */
+  gap: 7px;
+  margin: 40px 0 0;
 }
 .role-chip {
   font-size: 12.5px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.85);
-  background: rgba(255, 255, 255, 0.07);
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-radius: 999px;
-  padding: 5px 13px;
+  color: rgba(255, 255, 255, 0.8);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  padding: 6px 11px;
 }
 
-/* hero product mockup — a stylized, non-interactive preview of the results dashboard,
-   built from real markup rather than an image, so it never goes stale or needs an asset. */
+/* Hero product preview. It shows the questionnaire, using the real question and option
+   text from src/lib/questions.ts, rather than a results screen: a mocked shortlist has to
+   invent company names and match scores, and invented numbers in a hero are exactly the
+   thing a student would reasonably read as a real statistic. */
 .hero-mockup-wrap {
   position: relative;
-  margin: 56px auto 0;
-  max-width: 720px;
-  padding: 0 32px 70px;
-  /* Reveal now owned by data-sc-in (scroll-craft) — see .role-strip above. */
+  min-width: 0;
 }
 .mockup-card {
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 20px;
-  box-shadow: var(--shadow-lg), 0 0 90px rgba(255, 77, 28, 0.2);
+  border-radius: 14px;
+  box-shadow: var(--ring-warm), var(--shadow-lg), 0 0 110px rgba(255, 77, 28, 0.16);
   overflow: hidden;
-  transform: perspective(1400px) rotateX(3deg);
 }
 .mockup-titlebar {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 13px 16px;
-  background: var(--line-2);
-  border-bottom: 1px solid var(--line);
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line-2);
 }
-.mockup-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-}
-.mockup-titletext {
-  margin-left: 8px;
-  font-size: 12px;
-  color: var(--ink-3);
+.mockup-step {
+  font-size: 12.5px;
   font-weight: 600;
+  color: var(--ink-3);
 }
 .mockup-body {
-  padding: 20px 22px 22px;
-  text-align: left;
+  padding: 20px 18px 22px;
 }
-.mockup-stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  margin-bottom: 16px;
-}
-.mockup-stat {
-  background: var(--paper);
-  border: 1px solid var(--line-2);
-  border-radius: 12px;
-  padding: 9px 11px;
-}
-.mockup-stat.pop {
-  background: var(--accent-soft);
-  border-color: var(--accent-border);
-}
-.mockup-stat.pop b {
-  color: var(--accent-2);
-}
-.mockup-stat b {
-  display: block;
-  font-size: 17px;
-  font-weight: 800;
+.mockup-q {
+  font-size: 19px;
+  font-weight: 700;
   letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0 0 4px;
 }
-.mockup-score {
-  color: var(--accent-2);
-}
-.mockup-stat span {
-  font-size: 10px;
+.mockup-qsub {
+  font-size: 13.5px;
   color: var(--ink-3);
+  margin: 0 0 16px;
 }
-.mockup-row {
+.mockup-opt {
   display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 11px 13px;
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 10px;
   margin-bottom: 8px;
 }
-.mockup-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: 9px;
-  flex: 0 0 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: 700;
+.mockup-opt:last-child {
+  margin-bottom: 0;
 }
-.mockup-row-text {
-  flex: 1;
-  min-width: 0;
+.mockup-opt.on {
+  border-color: var(--accent-border);
+  background: var(--accent-soft);
 }
-.mockup-row-text b {
+.mockup-tick {
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid var(--line);
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+.mockup-opt.on .mockup-tick {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 3px var(--card);
+}
+.mockup-opt b {
   display: block;
-  font-size: 12.5px;
-}
-.mockup-row-text span {
-  font-size: 11px;
-  color: var(--ink-3);
-}
-.mockup-score {
-  font-weight: 800;
-  font-size: 14px;
+  font-size: 14.5px;
+  font-weight: 600;
   color: var(--ink);
+}
+.mockup-opt > span:last-child > span {
+  font-size: 12.5px;
+  color: var(--ink-3);
 }
 .float-badge {
   position: absolute;
+  left: -14px;
+  bottom: -18px;
   background: var(--card);
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 9px;
   box-shadow: var(--shadow-md);
-  padding: 10px 14px;
+  padding: 9px 13px;
   font-size: 12.5px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.float-badge.a {
-  top: 8%;
-  left: 0;
-  transform: rotate(-4deg);
-}
-.float-badge.b {
-  bottom: 14%;
-  right: 0;
-  transform: rotate(3deg);
-}
-@media (max-width: 760px) {
-  .float-badge {
-    display: none;
-  }
+  font-weight: 600;
+  color: var(--ink-2);
+  white-space: nowrap;
 }
 
-/* how it works */
+/* ---------- how it works ---------- */
 .steps {
-  margin: 92px 0 80px;
+  padding: 104px 0 24px;
 }
 .steps-head {
-  text-align: center;
-  max-width: 560px;
-  margin: 0 auto 40px;
-}
-.steps-head h2 {
-  margin-bottom: 10px;
+  max-width: 620px;
+  margin-bottom: 52px;
 }
 .steps-head p {
   color: var(--ink-3);
-  margin: 0;
-}
-.step-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 16px;
-}
-.step-card {
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: var(--r);
-  box-shadow: var(--shadow-sm);
-  padding: 26px 24px;
-  transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
-  animation: riseIn 0.5s ease both;
-}
-.step-card:nth-child(2) {
-  animation-delay: 0.08s;
-}
-.step-card:nth-child(3) {
-  animation-delay: 0.16s;
-}
-.step-card:hover {
-  box-shadow: var(--shadow-md);
-  border-color: var(--accent-border);
-  transform: translateY(-3px);
-}
-.step-num {
-  font-size: 12.5px;
-  font-weight: 800;
-  color: var(--ink-3);
-  letter-spacing: 0.04em;
-  margin-bottom: 14px;
-}
-.step-card h3 {
   font-size: 16px;
-  margin-bottom: 6px;
+  margin: 12px 0 0;
 }
-.step-card p {
-  font-size: 14px;
-  color: var(--ink-3);
+
+/* Numbered rows rather than three identical icon cards. The numeral carries the
+   sequence visually, so the step needs no "STEP 01" label to explain its own order. */
+.step-list {
+  list-style: none;
   margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line-2);
 }
-@media (max-width: 760px) {
-  .step-grid {
-    grid-template-columns: 1fr;
+.step-row {
+  display: grid;
+  grid-template-columns: 112px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+  padding: 34px 0;
+  border-bottom: 1px solid var(--line-2);
+}
+.step-figure {
+  font-size: 68px;
+  font-weight: 800;
+  line-height: 0.82;
+  letter-spacing: -0.05em;
+  color: transparent;
+  -webkit-text-stroke: 1.4px var(--mid);
+  font-variant-numeric: tabular-nums;
+}
+.step-body h3 {
+  font-size: clamp(21px, 2.3vw, 27px);
+  font-weight: 700;
+  letter-spacing: -0.025em;
+  margin-bottom: 10px;
+}
+.step-body p {
+  font-size: 15.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  margin: 0;
+  max-width: 62ch;
+}
+
+/* Three real, checkable facts about the product. Not usage metrics: this app has no
+   honest user count to publish, and an invented one is the fastest way to lose a reader
+   who checks. */
+.facts {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 20px;
+  padding: 64px 0 84px;
+}
+.fact b {
+  display: block;
+  font-size: 46px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.fact span {
+  display: block;
+  margin-top: 10px;
+  font-size: 14px;
+  line-height: 1.45;
+  color: var(--ink-3);
+  max-width: 24ch;
+}
+
+@media (max-width: 940px) {
+  .hero-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 48px;
+    padding-bottom: 72px;
+  }
+  .hero-text {
+    max-width: 620px;
+  }
+  .float-badge {
+    left: auto;
+    right: 0;
+  }
+}
+@media (max-width: 640px) {
+  .hero-sub {
+    font-size: 17px;
+  }
+  /* The desktop top padding exists to clear the overlapping header; on a phone it left a
+     screenful of empty ground above the headline. */
+  .hero {
+    padding-top: 104px;
+  }
+  .hero-grid {
+    gap: 36px;
+    padding-bottom: 48px;
+  }
+  /* Pinned to the card corner it overlapped the last option row at phone widths, so it
+     sits under the card instead. */
+  .float-badge {
+    position: static;
+    display: inline-block;
+    margin-top: 14px;
+  }
+  .steps {
+    padding: 72px 0 16px;
+  }
+  .steps-head {
+    margin-bottom: 34px;
+  }
+  .step-row {
+    grid-template-columns: 62px minmax(0, 1fr);
+    gap: 18px;
+    padding: 26px 0;
+  }
+  .step-figure {
+    font-size: 42px;
+  }
+  .facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 26px;
+    padding: 44px 0 60px;
+  }
+  .fact b {
+    font-size: 38px;
+  }
+  .fact span {
+    max-width: none;
   }
 }
 
@@ -662,16 +697,6 @@ header.bar:has(+ main .hero) {
   margin-top: 14px;
 }
 
-.ficon {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  margin-bottom: 16px;
-}
-
 /* ---------- auth ---------- */
 .panel {
   background: var(--card);
@@ -735,9 +760,11 @@ header.bar:has(+ main .hero) {
   background: rgba(215, 255, 63, 0.16);
   color: var(--lime);
   flex: 0 0 22px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  /* Now an inline SVG rather than a text glyph, so the circle needs inner padding to
+     stop the tick drawing edge to edge. */
+  display: block;
+  box-sizing: border-box;
+  padding: 4px;
   margin-top: 1px;
 }
 @media (max-width: 760px) {
@@ -771,7 +798,7 @@ input[type="email"] {
 input:focus {
   border-color: var(--near);
 }
-/* Kept white regardless of theme — Google's sign-in button brand guidelines require the
+/* Kept white regardless of theme, Google's sign-in button brand guidelines require the
    logo to sit on a light surface, so its text color is hardcoded to match rather than
    inheriting --ink (which is now light-on-dark and would vanish here). */
 .gbtn {
@@ -1099,7 +1126,7 @@ input:focus {
   display: inline-flex;
   gap: 2px;
   background: var(--line-2);
-  border-radius: 999px;
+  border-radius: 10px;
   padding: 4px;
   margin: 26px 0 0;
 }
@@ -1110,7 +1137,7 @@ input:focus {
   font-weight: 600;
   font-size: 13.5px;
   color: var(--ink-3);
-  border-radius: 999px;
+  border-radius: 7px;
   transition: background 0.12s, color 0.12s, box-shadow 0.12s;
 }
 .tab.on {
@@ -1289,7 +1316,7 @@ footer {
   color: var(--ink-3);
 }
 
-/* Landing-only closing footer — the page used to just stop after the step cards with
+/* Landing-only closing footer, the page used to just stop after the step cards with
    nothing beneath it, which read as unfinished. */
 .site-footer {
   margin-top: 40px;
@@ -1411,7 +1438,7 @@ footer {
 }
 
 /* ---------- scroll-craft (nateherkai/scroll-craft engine, light touch) ----------
-   Only the device rules the hero actually uses — data-sc-in (fire-once reveal),
+   Only the device rules the hero actually uses, data-sc-in (fire-once reveal),
    data-sc-tilt/magnet/spotlight (pointer). Deliberately NOT importing the skill's
    full scrollcraft.css: that file ships its own --sc-* token/reset layer (body
    background, :focus-visible, ::selection, scrollbar theming) which would fight
@@ -1619,7 +1646,7 @@ footer {
   color: var(--accent-2);
 }
 
-/* Results header actions — now three-to-four controls wide, so it has to wrap. */
+/* Results header actions, now three-to-four controls wide, so it has to wrap. */
 .res-actions {
   display: flex;
   align-items: center;

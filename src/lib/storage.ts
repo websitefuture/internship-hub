@@ -7,7 +7,7 @@ export function save<T>(key: string, value: T): void {
   try {
     window.localStorage.setItem(PREFIX + key, JSON.stringify(value));
   } catch {
-    // storage unavailable (private mode, quota) — fail silently like the prototype did
+    // storage unavailable (private mode, quota), fail silently like the prototype did
   }
 }
 

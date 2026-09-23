@@ -12,7 +12,7 @@ const instrumentSans = Instrument_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Internship Nest — find internships you can actually get to",
+  title: "Internship Nest: find internships you can actually get to",
   description:
     "Internship Nest ranks startups by how far they actually are from you, then by everything else.",
 };

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { CONTACT_EMAIL, COVERAGE_COUNTRIES, POLICY_UPDATED, SITE_NAME } from "../legal";
 
 export const metadata: Metadata = {
-  title: `Terms of Service — ${SITE_NAME}`,
+  title: `Terms of Service | ${SITE_NAME}`,
   description: `The rules for using ${SITE_NAME}, and the limits of what it promises.`,
 };
 
@@ -11,7 +11,7 @@ export default function TermsPage() {
   return (
     <main className="wrap legal">
       <Link className="legal-back" href="/">
-        ← Back to {SITE_NAME}
+        Back to {SITE_NAME}
       </Link>
       <h1 className="legal-h1">Terms of Service</h1>
       <p className="legal-meta">Last updated {POLICY_UPDATED}</p>
@@ -97,7 +97,7 @@ export default function TermsPage() {
 
       <h2>Liability</h2>
       <p>
-        To the extent the law allows, we are not liable for losses arising from your use of the site — including
+        To the extent the law allows, we are not liable for losses arising from your use of the site, including
         missed opportunities, inaccurate listings, or how a business responds to you. Nothing here limits rights you
         have that cannot legally be limited.
       </p>

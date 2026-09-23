@@ -28,7 +28,7 @@ export default function Dial({ list, size }: DialProps) {
     .filter((c) => c.d !== null && c.d !== undefined)
     .map((c, i) => {
       // Jitter is seeded from the label so the same company/listing lands in the same spot
-      // across re-renders — but two different listings can share a title (e.g. two separate
+      // across re-renders, but two different listings can share a title (e.g. two separate
       // "Lab Intern" postings), so the React key below needs the index to stay unique.
       const j = jitter(c.label, c.d! < 2 ? 26 : c.d! < 20 ? 20 : 14);
       const r = rr(c.d!);
@@ -82,7 +82,7 @@ export default function Dial({ list, size }: DialProps) {
           fill={p.col}
           opacity={p.top ? 1 : 0.5}
         >
-          <title>{`${p.label} — ${Math.round(p.d)} mi`}</title>
+          <title>{`${p.label}, ${Math.round(p.d)} mi`}</title>
         </circle>
       ))}
       <circle cx={cx} cy={cy} r={4.5} fill="#F5F7F3" />

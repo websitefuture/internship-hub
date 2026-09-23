@@ -3,7 +3,7 @@ import Link from "next/link";
 import { CONTACT_EMAIL, COVERAGE_COUNTRIES, POLICY_UPDATED, SITE_NAME } from "../legal";
 
 export const metadata: Metadata = {
-  title: `Privacy Policy — ${SITE_NAME}`,
+  title: `Privacy Policy | ${SITE_NAME}`,
   description: `What ${SITE_NAME} collects, where it goes, and how to get it deleted.`,
 };
 
@@ -11,7 +11,7 @@ export default function PrivacyPage() {
   return (
     <main className="wrap legal">
       <Link className="legal-back" href="/">
-        ← Back to {SITE_NAME}
+        Back to {SITE_NAME}
       </Link>
       <h1 className="legal-h1">Privacy Policy</h1>
       <p className="legal-meta">Last updated {POLICY_UPDATED}</p>
@@ -28,7 +28,7 @@ export default function PrivacyPage() {
         <li>If you sign in with Google, your answers and shortlist are saved so they are there next time.</li>
         <li>We never sell your data, and we do not run advertising trackers.</li>
         <li>
-          You can have everything deleted at any time — see <a href="#deletion">Deleting your data</a>.
+          You can have everything deleted at any time. See <a href="#deletion">Deleting your data</a>.
         </li>
       </ul>
 
@@ -56,10 +56,10 @@ export default function PrivacyPage() {
       </p>
       <ul>
         <li>
-          <strong>Search for a city</strong> — we use the coordinates of that city, which is approximate by design.
+          <strong>Search for a city</strong>: we use the coordinates of that city, which is approximate by design.
         </li>
         <li>
-          <strong>Use my current location</strong> — your browser asks your permission first, and if you allow it we
+          <strong>Use my current location</strong>: your browser asks your permission first, and if you allow it we
           receive precise coordinates. You never have to use this option; searching a city works fine.
         </li>
       </ul>
@@ -98,25 +98,25 @@ export default function PrivacyPage() {
       </p>
       <ul>
         <li>
-          <strong>Google</strong> — handles sign-in, if you choose it. Google sees that you signed in to this site.
+          <strong>Google</strong>: handles sign-in, if you choose it. Google sees that you signed in to this site.
         </li>
         <li>
-          <strong>Supabase</strong> — the database that stores saved answers and shortlists for signed-in users.
+          <strong>Supabase</strong>: the database that stores saved answers and shortlists for signed-in users.
         </li>
         <li>
-          <strong>Vercel</strong> — hosts the site and provides the cookieless analytics described above. Standard
+          <strong>Vercel</strong>: hosts the site and provides the cookieless analytics described above. Standard
           server logs, including IP addresses, are processed as part of hosting.
         </li>
         <li>
-          <strong>Adzuna</strong> — the live jobs search. It receives the city name and country you are searching, not
+          <strong>Adzuna</strong>: the live jobs search. It receives the city name and country you are searching, not
           your identity.
         </li>
         <li>
-          <strong>OpenStreetMap (Nominatim and Overpass)</strong> — turns your city search into coordinates, and finds
+          <strong>OpenStreetMap (Nominatim and Overpass)</strong>: turns your city search into coordinates, and finds
           nearby businesses. It receives the place text or coordinates being searched.
         </li>
         <li>
-          <strong>OSRM</strong> — calculates driving distances. It receives the start and end coordinates of a route.
+          <strong>OSRM</strong>: calculates driving distances. It receives the start and end coordinates of a route.
         </li>
       </ul>
       <p>We do not sell personal data, and we do not share it for advertising.</p>
@@ -146,11 +146,11 @@ export default function PrivacyPage() {
       <p>You have two routes, depending on how you used the site:</p>
       <ul>
         <li>
-          <strong>No account</strong> — your data is only in your browser. Use “Start over” in the app, or clear your
+          <strong>No account</strong>: your data is only in your browser. Use “Start over” in the app, or clear your
           browser data for this site.
         </li>
         <li>
-          <strong>Signed in</strong> — use the <strong>Delete my saved data</strong> button on the results screen to
+          <strong>Signed in</strong>: use the <strong>Delete my saved data</strong> button on the results screen to
           erase your saved answers and shortlist from our database immediately. You can also email{" "}
           <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> to request deletion, and we will action it.
         </li>
@@ -169,7 +169,7 @@ export default function PrivacyPage() {
       <h2>Where results come from</h2>
       <p>
         Job listings come from a live jobs API covering {COVERAGE_COUNTRIES.length} countries, and are not screened by
-        us. Business suggestions for high schoolers come from OpenStreetMap’s open data — those businesses have not
+        us. Business suggestions for high schoolers come from OpenStreetMap’s open data. Those businesses have not
         advertised a role, have no relationship with us, and have not agreed to be contacted. Treat them as leads to
         research, not as confirmed openings.
       </p>

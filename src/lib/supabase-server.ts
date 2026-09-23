@@ -8,7 +8,7 @@ if (!url || !secretKey) {
   throw new Error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SECRET_KEY");
 }
 
-// Uses the secret key (full read/write, bypasses RLS) — import this only from
+// Uses the secret key (full read/write, bypasses RLS), import this only from
 // server-side code (Server Components, Route Handlers), never a 'use client' file.
 const supabase = createClient(url, secretKey);
 

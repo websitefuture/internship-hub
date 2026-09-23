@@ -1,7 +1,7 @@
 import type { DriveTime } from "./types";
 
 // Real driving routes via OSRM's free public demo server (no API key, no billing).
-// Fair-use / light-traffic only — one table request per completed questionnaire.
+// Fair-use / light-traffic only, one table request per completed questionnaire.
 // Would need a self-hosted OSRM instance (or a paid provider) to handle real production traffic.
 const OSRM_BASE = "https://router.project-osrm.org/table/v1/driving";
 

@@ -1,7 +1,7 @@
 import type { RawListing } from "./types";
 
 // Free job-search data via Adzuna's public API (free app_id/app_key, no credit card).
-// Coverage is real but limited to the countries Adzuna indexes — checked by the caller
+// Coverage is real but limited to the countries Adzuna indexes, checked by the caller
 // before calling this, so we can tell users honestly when a place has no live data yet.
 const ADZUNA_BASE = "https://api.adzuna.com/v1/api/jobs";
 
@@ -35,7 +35,7 @@ function guessRemote(text: string): "remote" | "hybrid" | "onsite" {
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 
 // Most Adzuna postings route applications through their own redirect_url and never
-// mention an email — this only finds one when a listing genuinely includes one in its
+// mention an email, this only finds one when a listing genuinely includes one in its
 // own text, so we never have to invent a contact address that doesn't exist.
 function extractEmail(text: string): string | null {
   const m = text.match(EMAIL_RE);

@@ -1,7 +1,7 @@
 // Shared facts for the legal pages. Kept in one place so the privacy policy, the terms and
 // the in-app notices can never drift apart from each other.
 //
-// CONTACT_EMAIL is published publicly on /privacy and /terms — a privacy policy without a
+// CONTACT_EMAIL is published publicly on /privacy and /terms, a privacy policy without a
 // reachable contact is not much of a policy. Swap it here for a dedicated address if you
 // would rather not expose a personal inbox.
 export const CONTACT_EMAIL = "obattisha@gmail.com";
