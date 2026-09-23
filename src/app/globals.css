@@ -49,8 +49,7 @@ body {
   /* A soft accent glow carried through the whole app instead of stopping dead at the
      hero's edge, otherwise every screen past the hero reads as flat and the "flashy"
      identity only exists on the landing page. */
-  background: radial-gradient(ellipse 900px 500px at 50% -10%, rgba(255, 77, 28, 0.05) 0%, transparent 60%), var(--paper);
-  background-attachment: fixed;
+  background: var(--paper);
   color: var(--ink);
   font-family: var(--font-instrument-sans), system-ui, -apple-system, sans-serif;
   font-size: 16px;
@@ -318,11 +317,7 @@ header.bar:has(+ main .hero) {
   transform: translateX(-50%);
   padding: 176px max(24px, calc((100vw - 1140px) / 2 + 24px)) 0;
   text-align: left;
-  background:
-    radial-gradient(ellipse 620px 380px at 18% 0%, rgba(255, 77, 28, 0.24) 0%, transparent 60%),
-    radial-gradient(ellipse 500px 320px at 88% 10%, rgba(215, 255, 63, 0.12) 0%, transparent 55%),
-    radial-gradient(circle, rgba(255, 255, 255, 0.06) 1px, transparent 1px) 0 0 / 26px 26px,
-    var(--paper);
+  background: var(--paper);
   color: #fff;
 }
 .hero-text {
@@ -477,20 +472,6 @@ header.bar:has(+ main .hero) {
   font-size: 12.5px;
   color: var(--ink-3);
 }
-.float-badge {
-  position: absolute;
-  left: -14px;
-  bottom: -18px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  box-shadow: var(--shadow-md);
-  padding: 9px 13px;
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink-2);
-  white-space: nowrap;
-}
 
 /* ---------- how it works ---------- */
 .steps {
@@ -581,10 +562,6 @@ header.bar:has(+ main .hero) {
   .hero-text {
     max-width: 620px;
   }
-  .float-badge {
-    left: auto;
-    right: 0;
-  }
 }
 @media (max-width: 640px) {
   .hero-sub {
@@ -598,13 +575,6 @@ header.bar:has(+ main .hero) {
   .hero-grid {
     gap: 36px;
     padding-bottom: 48px;
-  }
-  /* Pinned to the card corner it overlapped the last option row at phone widths, so it
-     sits under the card instead. */
-  .float-badge {
-    position: static;
-    display: inline-block;
-    margin-top: 14px;
   }
   .steps {
     padding: 72px 0 16px;
@@ -1467,39 +1437,11 @@ footer {
   transform-style: preserve-3d;
   will-change: transform;
 }
-[data-sc-magnet] {
-  will-change: transform;
-}
-[data-sc-spotlight] {
-  isolation: isolate;
-  position: relative;
-}
-[data-sc-spotlight]::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 2;
-  border-radius: inherit;
-  background: radial-gradient(
-    26rem 26rem at calc(var(--sc-mx, 0.5) * 100%) calc(var(--sc-my, 0.5) * 100%),
-    rgba(255, 77, 28, 0.16),
-    transparent 70%
-  );
-  opacity: 0;
-  transition: opacity 420ms ease;
-}
-[data-sc-spotlight]:hover::after {
-  opacity: 1;
-}
 @media (prefers-reduced-motion: reduce) {
   [data-sc-in],
   [data-sc-stagger] > * {
     transform: none;
     transition-duration: 220ms;
-  }
-  [data-sc-spotlight]::after {
-    display: none;
   }
 }
 

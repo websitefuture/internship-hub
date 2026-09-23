@@ -752,7 +752,6 @@ export default function HomeClient() {
                     ))}
                   </div>
                 </div>
-                <div className="float-badge">Ranked by real drive time</div>
               </div>
             </div>
           </section>
@@ -802,12 +801,12 @@ export default function HomeClient() {
               <span>countries with live listing coverage</span>
             </div>
             <div className="fact">
-              <b>0</b>
-              <span>accounts required to run a search</span>
+              <b>2</b>
+              <span>minutes from the first question to a shortlist</span>
             </div>
             <div className="fact">
               <b>9</b>
-              <span>questions between you and a shortlist</span>
+              <span>questions, and that is the whole form</span>
             </div>
           </section>
         </main>
