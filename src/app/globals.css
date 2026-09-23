@@ -1475,3 +1475,172 @@ footer {
     display: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Legal pages (/privacy, /terms) and the in-app compliance affordances.
+   These pages are long-form prose, which nothing else in the app is, so they get
+   a narrower measure and larger leading than the product UI.
+   --------------------------------------------------------------------------- */
+.legal {
+  max-width: 760px;
+  padding-top: 46px;
+  padding-bottom: 90px;
+  color: var(--ink-2);
+  font-size: 15.5px;
+  line-height: 1.72;
+}
+.legal-back {
+  display: inline-block;
+  margin-bottom: 26px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink-3);
+  text-decoration: none;
+}
+.legal-back:hover {
+  color: var(--accent-2);
+}
+.legal-h1 {
+  font-size: clamp(30px, 5vw, 42px);
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin: 0 0 8px;
+}
+.legal-meta {
+  font-size: 13px;
+  color: var(--ink-3);
+  margin: 0 0 26px;
+}
+.legal-lede {
+  font-size: 17px;
+  line-height: 1.65;
+  color: var(--ink);
+  padding-bottom: 26px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.legal h2 {
+  font-size: 20px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  margin: 38px 0 10px;
+}
+.legal h3 {
+  font-size: 15.5px;
+  color: var(--ink);
+  margin: 24px 0 6px;
+}
+.legal p {
+  margin: 0 0 14px;
+}
+.legal ul {
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+.legal li {
+  margin-bottom: 9px;
+}
+.legal strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.legal code {
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--line-2);
+  color: var(--ink);
+}
+.legal a {
+  color: var(--accent-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.legal-foot {
+  margin-top: 40px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+  font-size: 13.5px;
+  color: var(--ink-3);
+}
+
+/* Consent + age line under the profile form, where personal details are collected. */
+.consent-note {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-2);
+  font-size: 12px;
+  line-height: 1.6;
+}
+.consent-note a {
+  color: var(--ink-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.consent-note a:hover {
+  color: var(--accent-2);
+}
+
+/* Policy links in the landing and results footers. */
+.site-footer-links {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
+  white-space: nowrap;
+}
+.site-footer-links a {
+  color: var(--ink-3);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+.site-footer-links a:hover {
+  color: var(--accent-2);
+  border-bottom-color: var(--accent-border);
+}
+.site-footer-links em {
+  font-style: normal;
+  color: var(--ink-3);
+}
+.legal-links {
+  display: flex;
+  gap: 18px;
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line-2);
+}
+.legal-links a {
+  color: var(--ink-3);
+  text-decoration: none;
+  border-bottom: 1px solid var(--line);
+}
+.legal-links a:hover {
+  color: var(--accent-2);
+}
+
+/* Results header actions — now three-to-four controls wide, so it has to wrap. */
+.res-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.btn.ghost.danger {
+  color: var(--accent-2);
+  border-color: var(--accent-border);
+}
+.btn.ghost.danger:hover {
+  background: var(--accent-soft);
+}
+.del-note {
+  font-size: 12.5px;
+}
+
+@media (max-width: 700px) {
+  .site-footer-links {
+    margin-left: 0;
+    flex-wrap: wrap;
+    white-space: normal;
+  }
+}

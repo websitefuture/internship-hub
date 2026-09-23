@@ -15,6 +15,19 @@ export async function GET() {
   return NextResponse.json({ answers: data?.answers ?? null, results: data?.results ?? null });
 }
 
+// Right-to-delete, exposed in the app as "Delete my saved data" and promised in the privacy
+// policy. It removes the row outright rather than flagging it, so nothing survives the call.
+export async function DELETE() {
+  const session = await auth();
+  const email = session?.user?.email;
+  if (!email) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+
+  const { error } = await supabase.from("user_data").delete().eq("user_email", email);
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  return NextResponse.json({ ok: true });
+}
+
 export async function POST(req: Request) {
   const session = await auth();
   const email = session?.user?.email;

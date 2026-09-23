@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import Link from "next/link";
 import { signIn, signOut, useSession } from "next-auth/react";
 import Dial, { type DialPoint } from "@/components/Dial";
 import { bearing } from "@/lib/geo";
@@ -437,6 +438,22 @@ export default function HomeClient() {
     }
   }, [status, session]);
 
+  // Right-to-delete, promised in the privacy policy. Two steps so a stray click can't wipe a
+  // saved shortlist. Only shown when signed in — a guest's data never leaves their browser,
+  // so "Change answers" and clearing site data already cover them.
+  const [delState, setDelState] = useState<"idle" | "confirm" | "working" | "done" | "err">("idle");
+
+  async function deleteSavedData() {
+    setDelState("working");
+    try {
+      const r = await fetch("/api/user-data", { method: "DELETE" });
+      if (!r.ok) throw new Error(String(r.status));
+      setDelState("done");
+    } catch {
+      setDelState("err");
+    }
+  }
+
   async function handleSignOut() {
     if (status === "authenticated") await signOut({ redirect: false });
     setUser(null);
@@ -696,7 +713,7 @@ export default function HomeClient() {
                 actually <span className="accent-text">get to.</span>
               </h1>
               <p className="hero-sub">
-                Nine quick questions. We search real, live listings worldwide — or, for high schoolers, real nearby
+                Nine quick questions. We search real, live listings across 18 countries — or, for high schoolers, real nearby
                 businesses worth a cold pitch — and rank everything by how you&apos;d actually get there.
               </p>
               <button className="btn" data-sc-magnet="0.15" onClick={() => go(user ? "q" : "auth")}>
@@ -789,7 +806,7 @@ export default function HomeClient() {
                     <path d="M2.5 10h15M10 2.5c2.5 2 2.5 13 0 15M10 2.5c-2.5 2-2.5 13 0 15" stroke="var(--lime-ink)" strokeWidth="1.4" />
                   </svg>
                 </div>
-                <h3>We search live, worldwide</h3>
+                <h3>We search live listings</h3>
                 <p>Real internship listings ranked by distance and fit — or, for high schoolers, real nearby businesses worth pitching.</p>
               </div>
               <div className="step-card">
@@ -835,7 +852,11 @@ export default function HomeClient() {
               Internship Nest
             </button>
             <span>Not affiliated with any employer or business shown in results. Listings and businesses are pulled live, not vetted by us.</span>
-            <span>© {new Date().getFullYear()} Internship Nest</span>
+            <span className="site-footer-links">
+              <Link href="/privacy">Privacy</Link>
+              <Link href="/terms">Terms</Link>
+              <em>© {new Date().getFullYear()} Internship Nest</em>
+            </span>
           </div>
         </footer>
       )}
@@ -900,6 +921,12 @@ export default function HomeClient() {
                 <p className="note" style={{ marginTop: 14 }}>
                   Saved in this browser only — not tied to an account, and won&apos;t follow you to another device.
                 </p>
+                <p className="note consent-note">
+                  By continuing, either way, you agree to our <Link href="/terms">Terms</Link> and{" "}
+                  <Link href="/privacy">Privacy Policy</Link>. You need to be at least 13 to use Internship Nest, and
+                  if you&apos;re under 18, check with a parent or guardian before signing in, sharing your location,
+                  or emailing a business.
+                </p>
               </div>
 
               <div className="auth-side">
@@ -907,7 +934,7 @@ export default function HomeClient() {
                 <ul className="check-list">
                   <li>
                     <span className="checkdot">✓</span>
-                    Real, live listings searched worldwide the moment you finish — not a stale database.
+                    Real, live listings searched the moment you finish — not a stale database.
                   </li>
                   <li>
                     <span className="checkdot">✓</span>
@@ -1056,13 +1083,30 @@ export default function HomeClient() {
                   </p>
                 )}
               </div>
-              <div style={{ display: "flex", gap: 8 }}>
+              <div className="res-actions">
                 <button className="btn ghost sm" onClick={() => go("q", 0)}>
                   Change answers
                 </button>
                 <button className="btn ghost sm" onClick={() => csvDownload(results)}>
                   Download CSV
                 </button>
+                {status === "authenticated" &&
+                  (delState === "done" ? (
+                    <span className="note del-note">Deleted from our database.</span>
+                  ) : delState === "confirm" || delState === "working" ? (
+                    <>
+                      <button className="btn ghost sm danger" onClick={deleteSavedData} disabled={delState === "working"}>
+                        {delState === "working" ? "Deleting…" : "Yes, delete it"}
+                      </button>
+                      <button className="btn ghost sm" onClick={() => setDelState("idle")} disabled={delState === "working"}>
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <button className="btn ghost sm" onClick={() => setDelState("confirm")}>
+                      {delState === "err" ? "Delete failed — retry" : "Delete my saved data"}
+                    </button>
+                  ))}
               </div>
             </div>
 
@@ -1147,6 +1191,10 @@ export default function HomeClient() {
               and Western Europe.
             </>
           )}
+          <p className="legal-links">
+            <Link href="/privacy">Privacy Policy</Link>
+            <Link href="/terms">Terms of Service</Link>
+          </p>
         </div>
         </footer>
       )}
