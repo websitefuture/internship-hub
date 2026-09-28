@@ -4,7 +4,7 @@
 // CONTACT_EMAIL is published publicly on /privacy and /terms, a privacy policy without a
 // reachable contact is not much of a policy. Swap it here for a dedicated address if you
 // would rather not expose a personal inbox.
-export const CONTACT_EMAIL = "obattisha@gmail.com";
+export const CONTACT_EMAIL = "internshipnest@gmail.com";
 
 export const SITE_NAME = "Internship Nest";
 
