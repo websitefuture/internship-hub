@@ -398,6 +398,15 @@ export default function HomeClient() {
           lat: loc?.lat ?? prev?.lat,
           lng: loc?.lng ?? prev?.lng,
         }));
+      // Google returns the browser through a full page load, so React state is gone and the
+      // view has reset to the landing page. Signing in therefore looked like it did nothing:
+      // the account was live, but the student was staring at the screen they started on.
+      // signIn() tags the return trip so a real sign-in can be told apart from someone simply
+      // reloading the home page, who should be left where they are.
+      const justSignedIn = new URLSearchParams(window.location.search).get("signedin") === "1";
+      const clearMarker = () => {
+        if (justSignedIn) window.history.replaceState(null, "", window.location.pathname);
+      };
       fetch("/api/user-data")
         .then((r) => r.json())
         .then((data: { answers?: Answers | null; results?: ScoredListing[] | null }) => {
@@ -414,9 +423,18 @@ export default function HomeClient() {
             }
             setTab(0);
             go("res");
+          } else if (justSignedIn) {
+            // Nothing saved yet, so send a new account straight into the questionnaire
+            // rather than back to the page they already read.
+            go("q", 0);
           }
+          clearMarker();
         })
-        .catch(() => syncUser());
+        .catch(() => {
+          syncUser();
+          if (justSignedIn) go("q", 0);
+          clearMarker();
+        });
     } else {
       Promise.resolve().then(() => {
         const p = load<UserProfile>("profile");
@@ -853,7 +871,7 @@ export default function HomeClient() {
                   So your answers and shortlist are here when you come back.
                 </p>
 
-                <button className="gbtn" onClick={() => signIn("google")}>
+                <button className="gbtn" onClick={() => signIn("google", { callbackUrl: "/?signedin=1" })}>
                   <svg width="17" height="17" viewBox="0 0 48 48" aria-hidden="true">
                     <path fill="#4285F4" d="M45 24c0-1.6-.1-2.7-.4-4H24v8h12c-.2 2-1.5 5-4.4 7l6.7 5.2C42.2 36.3 45 30.7 45 24z" />
                     <path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.4C29.7 36.6 27.1 37.4 24 37.4c-5.7 0-10.6-3.8-12.3-9.1l-7.1 5.5C8.1 41.3 15.4 46 24 46z" />
