@@ -82,7 +82,17 @@ export async function POST(req: Request) {
 
   let raw: RawListing[] = [];
   try {
-    raw = await searchAllSources({ countryCode, cityLabel });
+    raw = await searchAllSources({
+      countryCode,
+      cityLabel,
+      lat: loc.lat,
+      lng: loc.lng,
+      // Deliberately the same radius the prelim filter below uses, not the student's stated
+      // maximum. Distance is scored, not gated, so cutting the employer boards tighter than
+      // every other source would hide listings purely for coming from a board.
+      maxMiles: PRELIM_RADIUS_MILES,
+      wantsRemote: answers.mode === "remote",
+    });
   } catch {
     return NextResponse.json({ results: [], coverage: true, error: "Search failed" });
   }
@@ -93,12 +103,37 @@ export async function POST(req: Request) {
     return NextResponse.json({ results: [], coverage: ADZUNA_COUNTRIES.has(countryCode) });
   }
 
-  const prelim = raw
+  const byDistance = raw
     .map((r) => ({ r, dist: r.lat !== null && r.lng !== null ? miles(loc.lat, loc.lng, r.lat, r.lng) : null }))
     .filter((x) => x.dist === null || x.dist <= PRELIM_RADIUS_MILES)
-    .sort((a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9))
-    .slice(0, PRELIM_CAP);
+    .sort((a, b) => (a.dist ?? 1e9) - (b.dist ?? 1e9));
 
+  // Taking the nearest 50 outright lets one provider own the whole shortlist. In a city where
+  // Adzuna alone returns fifty listings inside a mile, every employer-board result sorts below
+  // the cut and the student never sees it, even though a posting read off the company's own
+  // board is the better link to apply through. Measured before this: San Francisco and Austin
+  // came back 50/50 Adzuna while the boards held internships in both.
+  //
+  // So each provider is guaranteed a small share first, and only then is the rest filled by
+  // distance. This picks candidates; scoreLive still ranks what survives, so a reserved slot
+  // buys a listing consideration, not a place at the top.
+  const RESERVED_PER_SOURCE = 8;
+  const chosen = new Set<(typeof byDistance)[number]>();
+  const perSource = new Map<string, number>();
+
+  for (const x of byDistance) {
+    const src = x.r.source ?? "Other";
+    const used = perSource.get(src) ?? 0;
+    if (used >= RESERVED_PER_SOURCE || chosen.size >= PRELIM_CAP) continue;
+    perSource.set(src, used + 1);
+    chosen.add(x);
+  }
+  for (const x of byDistance) {
+    if (chosen.size >= PRELIM_CAP) break;
+    chosen.add(x);
+  }
+
+  const prelim = byDistance.filter((x) => chosen.has(x));
   const listings = prelim.map((x) => x.r);
 
   let driveTimes: (DriveTime | null)[] | undefined;

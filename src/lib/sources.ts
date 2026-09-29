@@ -1,55 +1,23 @@
 import type { RawListing } from "./types";
 import { ADZUNA_COUNTRIES, searchInternships } from "./jobs";
+import { searchBoards } from "./boards";
+import { geocodePlaces } from "./places";
 
 // Listings used to come from Adzuna alone, which let one provider decide by itself what a
 // student is allowed to find. This runs several in parallel and merges them.
 //
 // Measured live against each candidate before any of this was written:
-//   The Muse   9,886 internships behind a real level=Internship filter, no API key
-//   Adzuna     the existing provider, and the only one that returns coordinates
+//   Adzuna           the existing provider, and the only one that returns coordinates
+//   The Muse         9,886 internships behind a real level=Internship filter, no API key
+//   Employer boards  29 verified company boards across four applicant-tracking systems,
+//                    read from the employer directly rather than an aggregator (boards.ts)
 // Tested and rejected: Arbeitnow (a German board, 5 internships in 326), Jobicy / Himalayas /
 // RemoteOK / WeWorkRemotely (remote only, 0-1 internships between them), CareerOneStop and
-// SmartRecruiters' search (dead endpoints), USAJOBS (401, needs a free key).
+// SmartRecruiters' search (dead endpoints), USAJOBS (401 on every header form tried; its
+// search genuinely requires a free key from developer.usajobs.gov).
 
-const PHOTON = "https://photon.komoot.io/api";
 const MUSE = "https://www.themuse.com/api/public/jobs";
 const UA = "internship-nest/1.0 (+https://internship-nest.vercel.app)";
-
-// Adzuna hands back lat/lng; nobody else does, they give strings like "Bellevue, Washington".
-// Distance ranking is the entire product, so those have to be resolved. Nominatim's usage
-// policy is one request per second, which would spend 15s inside a single search. Photon
-// answered 16 places in parallel in 2.0s with no failures and no key, so this uses that.
-//
-// The cache lives at module scope, which on Vercel means it survives for the life of a warm
-// function instance. Cities repeat constantly across searches, so most lookups cost nothing.
-const placeCache = new Map<string, { lat: number; lng: number } | null>();
-const MAX_GEOCODES_PER_SEARCH = 20;
-
-async function geocodeOne(place: string): Promise<{ lat: number; lng: number } | null> {
-  try {
-    const res = await fetch(`${PHOTON}/?limit=1&q=${encodeURIComponent(place)}`, {
-      headers: { "User-Agent": UA },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) return null;
-    const data = (await res.json()) as { features?: { geometry?: { coordinates?: number[] } }[] };
-    const c = data.features?.[0]?.geometry?.coordinates;
-    if (!c || c.length < 2) return null;
-    return { lat: c[1], lng: c[0] };
-  } catch {
-    return null;
-  }
-}
-
-async function geocodePlaces(places: string[]): Promise<Map<string, { lat: number; lng: number } | null>> {
-  const unique = Array.from(new Set(places.filter(Boolean)));
-  const missing = unique.filter((p) => !placeCache.has(p)).slice(0, MAX_GEOCODES_PER_SEARCH);
-  const found = await Promise.all(missing.map(geocodeOne));
-  missing.forEach((p, i) => placeCache.set(p, found[i]));
-  const out = new Map<string, { lat: number; lng: number } | null>();
-  for (const p of unique) out.set(p, placeCache.get(p) ?? null);
-  return out;
-}
 
 interface MuseJob {
   id?: number;
@@ -81,11 +49,15 @@ function stripHtml(html: string): string {
 // remote listing rather than a place that can be geocoded.
 const isRemoteLabel = (name: string) => /flexible|remote/i.test(name);
 
-async function searchMuse(cityLabel: string): Promise<RawListing[]> {
-  // Two pages is 40 listings, already more than the shortlist shows, and it keeps this inside
-  // its time budget while other providers run alongside it.
+async function searchMuse(cityLabel: string, wantsRemote: boolean): Promise<RawListing[]> {
+  // The Muse's location filter does not actually filter: asking it for "Austin, TX" returns
+  // New York, San Francisco and Athens, Greece. So it is not a local source and is not
+  // trusted as one; every listing it returns still gets geocoded and distance-checked like
+  // any other. Where it is genuinely strong is remote postings, which have no location to
+  // get wrong, so a student who asked for remote gets four pages instead of two.
+  const pageNums = wantsRemote ? [0, 1, 2, 3] : [0, 1];
   const pages = await Promise.all(
-    [0, 1].map(async (page) => {
+    pageNums.map(async (page) => {
       try {
         const url = `${MUSE}?level=Internship&location=${encodeURIComponent(cityLabel)}&page=${page}`;
         const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(10000) });
@@ -101,9 +73,9 @@ async function searchMuse(cityLabel: string): Promise<RawListing[]> {
   const jobs = pages.flat();
   if (jobs.length === 0) return [];
 
-  // Resolve every distinct office location in one parallel batch rather than once per listing.
+  // Resolve every distinct office location once. This is a table lookup, not a network call.
   const placeOf = (j: MuseJob) => (j.locations ?? []).map((l) => l.name ?? "").find((n) => n && !isRemoteLabel(n)) ?? "";
-  const coords = await geocodePlaces(jobs.map(placeOf));
+  const coords = geocodePlaces(jobs.map(placeOf));
 
   const out: RawListing[] = [];
   for (const j of jobs) {
@@ -139,20 +111,32 @@ async function searchMuse(cityLabel: string): Promise<RawListing[]> {
 const dedupeKey = (l: RawListing) =>
   `${l.company.toLowerCase().replace(/[^a-z0-9]/g, "")}|${l.title.toLowerCase().replace(/[^a-z0-9]/g, "")}`;
 
-export async function searchAllSources(opts: { countryCode: string; cityLabel: string }): Promise<RawListing[]> {
-  // Adzuna covers 18 countries; The Muse has no country filter and is overwhelmingly US.
-  // Asking a provider about a place it does not cover only spends time, so each runs only
-  // where it has something to say. Neither is allowed to fail the whole search.
-  const [adzuna, muse] = await Promise.all([
+export async function searchAllSources(opts: {
+  countryCode: string;
+  cityLabel: string;
+  lat: number;
+  lng: number;
+  maxMiles: number;
+  wantsRemote: boolean;
+}): Promise<RawListing[]> {
+  // Adzuna covers 18 countries; The Muse has no country filter and is overwhelmingly US; the
+  // employer boards are US-centric but carry the listings no aggregator has. Asking a provider
+  // about a place it does not cover only spends time, so each runs only where it has something
+  // to say, all three at once, and none of them is allowed to fail the whole search.
+  const [adzuna, muse, boards] = await Promise.all([
     ADZUNA_COUNTRIES.has(opts.countryCode)
       ? searchInternships(opts).catch(() => [] as RawListing[])
       : Promise.resolve([] as RawListing[]),
-    searchMuse(opts.cityLabel).catch(() => [] as RawListing[]),
+    searchMuse(opts.cityLabel, opts.wantsRemote).catch(() => [] as RawListing[]),
+    searchBoards({ lat: opts.lat, lng: opts.lng, maxMiles: opts.maxMiles }).catch(() => [] as RawListing[]),
   ]);
 
-  // Adzuna first, so where both list the same role the copy with real coordinates wins.
+  // Order decides which copy of a duplicate survives. Employer boards go first because a
+  // listing read off the company's own board is the primary record: it is current, it links
+  // to the real application page, and it has not been through an aggregator's reformatting.
+  // Adzuna comes next since it is the only source carrying true coordinates.
   const merged = new Map<string, RawListing>();
-  for (const l of [...adzuna.map((a) => ({ ...a, source: a.source ?? "Adzuna" })), ...muse]) {
+  for (const l of [...boards, ...adzuna.map((a) => ({ ...a, source: a.source ?? "Adzuna" })), ...muse]) {
     const key = dedupeKey(l);
     if (!merged.has(key)) merged.set(key, l);
   }

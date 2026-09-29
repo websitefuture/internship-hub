@@ -73,6 +73,21 @@ function payLabel(c: ScoredListing): string {
   return c.unpaidMentioned ? "Unpaid" : "Pay not listed";
 }
 
+// Every result says where it came from. The app searches several places at once and they are
+// not equivalent: a posting read off a company's own board links to the real application page,
+// while a cold-outreach suggestion is a business that never advertised a role at all. A
+// student deciding how much to trust a result deserves to know which one they are looking at.
+function sourceNote(c: ScoredListing): string {
+  const src = c.source || "Adzuna";
+  if (c.coldOutreach) {
+    // OpenStreetMap entries can be a decade old, and a business that nobody has edited since
+    // 2009 is worth phoning before visiting.
+    const year = c.sourceUpdated ? new Date(c.sourceUpdated).getFullYear() : null;
+    return year && !Number.isNaN(year) ? `Business listing from ${src}, last updated ${year}` : `Business listing from ${src}`;
+  }
+  return `Listing from ${src}`;
+}
+
 function csvDownload(res: ScoredListing[]) {
   const rows: (string | number)[][] = [["Rank", "Title", "Company", "Miles", "Location", "Score", "Listing"]];
   res.slice(0, 50).forEach((c, i) => {
@@ -269,11 +284,14 @@ function ResultRow({
           )}
         </div>
         <p className="desc">{c.description ? `${c.description.slice(0, 220)}${c.description.length > 220 ? "…" : ""}` : ""}</p>
-        {!c.coldOutreach && (
-          <p className="desc" style={{ color: "var(--ink-3)" }}>
-            {payLabel(c)} · {c.remoteGuess === "remote" ? "Remote" : c.remoteGuess === "hybrid" ? "Hybrid" : "In person"}
-          </p>
-        )}
+        <p className="desc" style={{ color: "var(--ink-3)" }}>
+          {!c.coldOutreach && (
+            <>
+              {payLabel(c)} · {c.remoteGuess === "remote" ? "Remote" : c.remoteGuess === "hybrid" ? "Hybrid" : "In person"} ·{" "}
+            </>
+          )}
+          {sourceNote(c)}
+        </p>
         <p className="why">{why(c)}</p>
       </div>
       <div className="score">

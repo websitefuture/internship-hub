@@ -1057,19 +1057,23 @@ input:focus {
   display: grid;
 }
 @media (max-width: 980px) {
+  /* minmax(0, 1fr), not 1fr: a 1fr track will not shrink below its content's min-content
+     size, so on a phone the sidebar held this grid open wider than the screen and the whole
+     results page scrolled sideways, cutting the right edge off every card. */
   .res-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .res-side {
     position: static;
+    min-width: 0;
   }
   .res-side .statcards {
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 @media (max-width: 560px) {
   .res-side .statcards {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -1321,8 +1325,11 @@ footer {
   }
 }
 @media (max-width: 640px) {
+  /* Same reason as .res-grid above: the text column holds long unbroken strings (company
+     names, job titles, URLs), and a bare 1fr refuses to shrink below them, pushing the card
+     past the screen edge. */
   .row {
-    grid-template-columns: 42px 1fr;
+    grid-template-columns: 42px minmax(0, 1fr);
     gap: 12px;
   }
   .rank {
