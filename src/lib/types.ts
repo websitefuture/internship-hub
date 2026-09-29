@@ -9,14 +9,14 @@ export interface Company {
   g: number; // growth score, 0-15
   x: number; // contact reachability score, 0-15
   z: number; // unused in current scoring, kept for parity with source data
-  hs: number; // explicitly welcomes high schoolers — truthy check, source data has some non-1 truthy values (e.g. 5)
+  hs: number; // explicitly welcomes high schoolers, truthy check, source data has some non-1 truthy values (e.g. 5)
   w: string | null; // website
   k: string; // one-line kicker / caveat
   desc: string; // description
 }
 
 export type RoleKey = "marketing" | "ops" | "eng" | "design" | "data" | "trades" | "healthcare" | "hospitality" | "retail";
-// The role question's "Something else" option — kept out of RoleKey (which drives fixed
+// The role question's "Something else" option, kept out of RoleKey (which drives fixed
 // keyword/OSM-tag lookups) since it carries no fixed category, only whatever free text the
 // student types into roleOther.
 export type RoleSelection = RoleKey | "other";
@@ -94,7 +94,7 @@ export interface RawListing {
   contactEmail: string | null; // pulled from the listing text itself, when a listing includes one
   // Only set for high-school-stage searches: "confirmed" means the full posting was fetched
   // and doesn't require college/grad enrollment; "unverified" means the full page couldn't be
-  // loaded to check (Adzuna's site occasionally blocks automated fetches) — shown, not hidden,
+  // loaded to check (Adzuna's site occasionally blocks automated fetches), shown, not hidden,
   // but flagged so a student knows to double-check it themselves before applying.
   hsEligibility?: "confirmed" | "unverified";
   // High-school-stage results only: this is a real local business with no known opening,
@@ -102,6 +102,12 @@ export interface RawListing {
   coldOutreach?: boolean;
   websiteUrl?: string | null;
   phone?: string | null;
+  // High-school cold-outreach listings only: the raw OSM tag value that matched the search
+  // (e.g. "hairdresser", "it", "architect"), used by scoring.ts to grade role fit by how
+  // central that specific tag is to the requested role, instead of keyword-matching the
+  // generated description (which mentions the searched role in every single result and so
+  // can't distinguish one business from another).
+  matchTag?: string | null;
 }
 
 export type LiveScoreParts = Record<"Commute" | "Role fit" | "Pay" | "Mode", number>;
