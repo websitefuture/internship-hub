@@ -333,6 +333,17 @@ export default function HomeClient() {
   // the back/forward buttons and the browser's back gesture work like on any other site,
   // instead of the whole app being invisible to history because it's one client-rendered page.
   const skipPushRef = useRef(false);
+  // useSession() hands back a fresh object on every render, so an effect depending on the
+  // session itself re-runs forever: it refetches, setUser renders, the effect fires again.
+  // Signing in looked like it did nothing because the page was thrashing. Keyed on the
+  // account's email instead, and this records which account has already been set up.
+  const authHandledRef = useRef<string | null>(null);
+  // Lets the post-auth effect read the current view without going stale in its closure.
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
   function go(nextView: View, nextQIndex = 0) {
     setView(nextView);
     if (nextView === "q") setQIndex(nextQIndex);
@@ -387,14 +398,18 @@ export default function HomeClient() {
     };
   }, [view]);
 
+  const sessionEmail = session?.user?.email ?? null;
+  const sessionName = session?.user?.name ?? null;
   useEffect(() => {
     if (status === "loading") return;
-    if (status === "authenticated" && session.user) {
-      const sessionUser = session.user;
+    if (status === "authenticated" && sessionEmail) {
+      // Only set an account up once. Without this the effect refetches endlessly.
+      if (authHandledRef.current === sessionEmail) return;
+      authHandledRef.current = sessionEmail;
       const syncUser = (loc?: LocationAnswer | null) =>
         setUser((prev) => ({
-          name: sessionUser.name ?? "You",
-          email: sessionUser.email ?? "",
+          name: sessionName ?? "You",
+          email: sessionEmail,
           lat: loc?.lat ?? prev?.lat,
           lng: loc?.lng ?? prev?.lng,
         }));
@@ -423,16 +438,19 @@ export default function HomeClient() {
             }
             setTab(0);
             go("res");
-          } else if (justSignedIn) {
-            // Nothing saved yet, so send a new account straight into the questionnaire
-            // rather than back to the page they already read.
+          } else if (justSignedIn || viewRef.current === "auth") {
+            // Nothing saved yet, so send a new account into the questionnaire rather than
+            // back to the page they already read. Sitting on the sign-in screen while
+            // already signed in is never right either, so that moves on too, which covers
+            // a session that outlived the page it was created on.
             go("q", 0);
           }
           clearMarker();
         })
         .catch(() => {
+          // A saved-data hiccup must not strand anyone on the sign-in screen.
           syncUser();
-          if (justSignedIn) go("q", 0);
+          if (justSignedIn || viewRef.current === "auth") go("q", 0);
           clearMarker();
         });
     } else {
@@ -454,7 +472,8 @@ export default function HomeClient() {
         }
       });
     }
-  }, [status, session]);
+    // Keyed on primitives rather than the session object, whose identity changes every render.
+  }, [status, sessionEmail, sessionName]);
 
   // Right-to-delete, promised in the privacy policy. Two steps so a stray click can't wipe a
   // saved shortlist. Only shown when signed in, a guest's data never leaves their browser,
