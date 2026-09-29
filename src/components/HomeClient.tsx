@@ -108,6 +108,13 @@ function firstUnanswered(answers: Answers): number {
   return i === -1 ? 0 : i;
 }
 
+// firstUnanswered() returns 0 both for "the very first question is blank" and for "nothing is
+// blank", so it cannot be used to tell whether a returning student is actually finished. That
+// ambiguity is what sent someone with every answer saved back to question one.
+function allAnswered(answers: Answers): boolean {
+  return QUESTIONS.every((q) => !isAnswerEmpty(q, answers));
+}
+
 function isAnswerEmpty(q: Question, answers: Answers): boolean {
   const v = answers[q.k];
   if (q.type === "many") return !(Array.isArray(v) && v.length);
@@ -339,6 +346,12 @@ export default function HomeClient() {
   const [results, setResults] = useState<ScoredListing[] | null>(null);
   const [coverage, setCoverage] = useState(true);
   const [hsRadiusMiles, setHsRadiusMiles] = useState(0);
+  // True when the search itself could not run, as opposed to running and finding nothing.
+  const [searchFailed, setSearchFailed] = useState(false);
+  // runSearch is declared further down the component, and the post-sign-in effect above needs
+  // to start it. Held in a ref, refreshed in an effect rather than during render, because
+  // writing a ref while rendering is exactly the mistake React warns about.
+  const runSearchRef = useRef<((a: Answers, u: UserProfile) => Promise<void>) | null>(null);
   const [hsCity, setHsCity] = useState("");
   const [contactFor, setContactFor] = useState<ScoredListing | null>(null);
   const [name, setName] = useState("");
@@ -492,6 +505,17 @@ export default function HomeClient() {
             // The only navigation left here: a returning account goes to the shortlist it
             // already has rather than answering all nine questions again.
             go("res");
+          } else if (data.answers && allAnswered(data.answers) && data.answers.loc) {
+            // Every question already answered, but no shortlist saved against the account:
+            // that is what happens when the search failed the last time round. Run it for
+            // them rather than walking them back through answers they have already given.
+            const saved = data.answers.loc;
+            runSearchRef.current?.(data.answers, {
+              name: sessionName ?? "You",
+              email: sessionEmail,
+              lat: saved.lat,
+              lng: saved.lng,
+            });
           } else if (data.answers && viewRef.current === "q") {
             // Half-finished form: pick up where they stopped rather than at question one.
             go("q", firstUnanswered(data.answers));
@@ -651,12 +675,24 @@ export default function HomeClient() {
     }
 
     const loc = answers.loc!;
-    const finalUser: UserProfile = { ...user!, lat: loc.lat, lng: loc.lng };
+    await runSearch(answers, { ...user!, lat: loc.lat, lng: loc.lng });
+  }
+
+  // The search, separated from the question flow that used to contain it. A returning account
+  // with a full set of answers and no saved shortlist needs to run exactly this, and making
+  // them press Next through nine questions they had already answered to get there was the
+  // complaint.
+  useEffect(() => {
+    runSearchRef.current = runSearch;
+  });
+
+  async function runSearch(a: Answers, finalUser: UserProfile) {
+    const loc = a.loc!;
     setUser(finalUser);
     setComputing(true);
 
     const stages =
-      answers.stage === "hs"
+      a.stage === "hs"
         ? [
             "Finding real local businesses near you…",
             "Checking real distances…",
@@ -680,12 +716,16 @@ export default function HomeClient() {
       const res = await fetch("/api/search-live", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers, loc }),
+        body: JSON.stringify({ answers: a, loc }),
       });
       const data = await res.json();
       const computed: ScoredListing[] = data.results || [];
       setResults(computed);
       setCoverage(data.coverage !== false);
+      // An empty list because the search could not run is a different thing from an empty
+      // list because nowhere matched, and telling a student to widen their radius when the
+      // search never reached the data just wastes their time.
+      setSearchFailed(Boolean(data.error) && computed.length === 0);
       setHsRadiusMiles(data.hsRadiusMiles || 0);
       setHsCity(data.hsCity || "");
       setTab(0);
@@ -694,11 +734,11 @@ export default function HomeClient() {
         fetch("/api/user-data", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers, results: computed }),
+          body: JSON.stringify({ answers: a, results: computed }),
         }).catch(() => {});
       } else {
         save("profile", finalUser);
-        save("answers", answers);
+        save("answers", a);
         save("results", computed);
       }
     } catch {
@@ -1143,11 +1183,13 @@ export default function HomeClient() {
               <div>
                 <h2>{answers.stage === "hs" ? "Businesses worth pitching" : "Your shortlist"}</h2>
                 <p className="note" style={{ marginTop: 6 }}>
-                  {answers.stage === "hs"
-                    ? `${results.length} real businesses within ${effectiveLim} miles of ${hsCity || answers.loc!.label}.`
-                    : coverage
-                      ? `${results.length} live listings ranked from ${answers.loc!.label}.`
-                      : `We don't have live coverage for ${answers.loc!.label} yet. Coverage today is the US, UK, Canada, Australia, and about a dozen more countries, mostly in Europe.`}
+                  {searchFailed
+                    ? `Couldn't reach the search just then for ${hsCity || answers.loc!.label}.`
+                    : answers.stage === "hs"
+                      ? `${results.length} real businesses within ${effectiveLim} miles of ${hsCity || answers.loc!.label}.`
+                      : coverage
+                        ? `${results.length} live listings ranked from ${answers.loc!.label}.`
+                        : `We don't have live coverage for ${answers.loc!.label} yet. Coverage today is the US, UK, Canada, Australia, and about a dozen more countries, mostly in Europe.`}
                 </p>
                 {answers.stage === "hs" && (
                   <p className="note" style={{ marginTop: 4 }}>
@@ -1232,11 +1274,13 @@ export default function HomeClient() {
             ) : (
               <div className="list">
                 <div className="empty">
-                  {answers.stage === "hs"
-                    ? "Couldn't find nearby businesses matching this. Try widening the distance on question 2, or a bigger nearby city."
-                    : !coverage
-                      ? "Try a city in a country we have live coverage for."
-                      : "Nothing matched. Try widening the distance on question 2, or a bigger nearby city."}
+                  {searchFailed
+                    ? "The business directory we search didn't respond just then. Nothing is wrong with your answers: hit Change answers and search again."
+                    : answers.stage === "hs"
+                      ? "Couldn't find nearby businesses matching this. Try widening the distance on question 2, or a bigger nearby city."
+                      : !coverage
+                        ? "Try a city in a country we have live coverage for."
+                        : "Nothing matched. Try widening the distance on question 2, or a bigger nearby city."}
                 </div>
               </div>
             )}

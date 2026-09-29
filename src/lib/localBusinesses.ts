@@ -58,30 +58,24 @@ const ROLE_LABELS: Record<RoleKey, string> = {
 // nearby enough for a teen to visit or call, which matters more here than for a
 // remote-friendly internship search.
 export const MAX_RADIUS_MILES = 50;
-// One wide query cannot serve 50 miles. Measured against Overpass's public instance around
-// Austin with the hospitality filters: 10mi answered in 6.8s with a full 200 results, 25mi in
-// 24.8s, and 50mi hit the server-side timeout and returned zero elements. So the search widens
-// in tiers and stops as soon as it has enough. The expensive case never runs: a dense area
-// fills up at the first tier, and the only searches that reach 50 miles are the sparse ones,
-// which are cheap precisely because they are sparse.
-const RADIUS_TIERS = [10, 25, 50];
-// Results are capped to the 60 nearest downstream, so widening past this buys nothing.
-const ENOUGH_RESULTS = 50;
-// Hard ceiling on the whole search. Widening must never turn into a queue of slow tiers:
-// once this is spent the search returns what it already has rather than making a student
-// watch a spinner. In practice a dense area fills up on the first tier in well under this.
-const SEARCH_BUDGET_MS = 20_000;
-// Each tier gets a workable timeout of its own rather than whatever is left of the budget.
-// Deriving it from the remainder starved the first query: with a 13s budget the opening 10mi
-// tier told Overpass [timeout:11], which a dense city cannot answer in, and Austin went from
-// 60 results to zero. The budget decides whether to start another tier, not how hard the
-// current one is allowed to try.
-const tierTimeoutMs = (radiusMiles: number) => (radiusMiles <= 15 ? 18_000 : 26_000);
-// Widening only pays while it keeps finding new places. Measured live around Ely, Nevada:
-// 10mi returns 17 businesses and 50mi returns 21, so the wider tiers spent the entire budget
-// to add four results. When a tier adds less than this, the area is simply exhausted and the
-// next tier will not do better, so the search stops rather than making a student wait for it.
-const DIMINISHING_RETURN = 5;
+// Each query gets a workable timeout of its own rather than a share of one shared budget.
+// Deriving it from a remainder starved the first query: with a 13s budget the opening 10mi
+// query told Overpass [timeout:11], which a dense city cannot answer in, and Austin went from
+// 60 results to zero.
+//
+// These are generous because the public instance genuinely is slow for this query: measured
+// from Campbell, California, it took 14.8s to 28.8s for the same request. Cutting them back
+// does not make the search faster, it only makes it come back empty.
+const tierTimeoutMs = (radiusMiles: number) => (radiusMiles <= 15 ? 22_000 : 30_000);
+// Overpass reports a freed slot in roughly five seconds, so a retry waits for one rather than
+// immediately spending the client's second attempt on the same refusal.
+const RETRY_WAIT_MS = 5_000;
+// Overpass's public instance allows very few concurrent queries per client, so the cheapest
+// way to be a good citizen of it is to ask less often. Students in the same town search the
+// same box, and this is also what stops the automatic re-run for a returning account from
+// costing a fresh query every time they open the site.
+const BUSINESS_CACHE_TTL_MS = 60 * 60 * 1000;
+const businessCache = new Map<string, { at: number; elements: OverpassElement[] }>();
 
 export function radiusMilesForAnswers(max?: string): number {
   return Math.min(parseFloat(max || "10") || 10, MAX_RADIUS_MILES);
@@ -218,7 +212,12 @@ function buildQuery(lat: number, lng: number, radiusMiles: number, filters: stri
   const west = lng - dLng;
   const east = lng + dLng;
   const clauses = filters.map((f) => `  node${f}["name"];\n  way${f}["name"];`).join("\n");
-  return `[out:json][timeout:${budget}][bbox:${south},${west},${north},${east}];\n(\n${clauses}\n);\nout center meta 200;`;
+  // No "meta". It was added to carry each record's last-edited date, on the belief that it
+  // cost nothing measurable. Re-measured from Campbell, California, that was wrong: the same
+  // query ran 14.8s, 19.7s and 28.8s with meta against a steady 17.0s, 16.6s and 17.1s
+  // without it. The variance is what mattered, because a run past the timeout returns nothing
+  // at all. Knowing a business record is old is worth less than the search finishing.
+  return `[out:json][timeout:${budget}][bbox:${south},${west},${north},${east}];\n(\n${clauses}\n);\nout center 200;`;
 }
 
 export async function fetchLocalBusinesses(opts: {
@@ -247,32 +246,67 @@ export async function fetchLocalBusinesses(opts: {
       headers: { Accept: "*/*", "User-Agent": "internship-nest/1.0 (student cold-outreach finder)" },
       signal: AbortSignal.timeout(budgetMs),
     });
-    if (!res.ok) return [];
+    // Deliberately thrown rather than returning []. Overpass answers 429 when its public
+    // instance is out of slots and 504 when a query outruns the server's own timeout, and
+    // swallowing those made a busy service indistinguishable from an empty neighbourhood:
+    // the page told students "0 real businesses within 30 miles" when the truth was that
+    // nobody had looked yet. The caller decides what to do with a failure.
+    if (!res.ok) throw new Error(`Overpass ${res.status}`);
     const body = (await res.json()) as OverpassResponse;
     return body.elements ?? [];
   }
 
-  // Every tier up to what the student actually asked for, narrowest first.
-  const tiers = Array.from(
-    new Set([...RADIUS_TIERS.filter((r) => r < opts.radiusMiles), opts.radiusMiles]),
-  ).sort((a, b) => a - b);
+  // One query, and at most one retry. Not two queries, and not a ladder of widening tiers.
+  //
+  // The tiers came first: each radius in turn, sharing a 20s budget. That starved itself,
+  // because this query costs about 17s at *any* radius (the work is scanning tag filters, not
+  // covering area), so the opening tier spent 18 of the 20 seconds and every later one broke
+  // on the leftovers. A student got an empty page after a 20s wait. Reproduced from Campbell,
+  // California: 60 businesses in 10.4s, then zero in 20.4s, same city, same answers.
+  //
+  // Running two radii in parallel fixed the arithmetic and then failed for a worse reason.
+  // Overpass's public instance publishes its own limit, and it is small:
+  //     Rate limit: 2
+  //     1 slots available now.
+  // Two concurrent queries claim both slots, so the app was rate-limiting itself. Measured
+  // directly, that pair came back HTTP 429, and 504 on the next attempt. Half the searches
+  // returned nothing.
+  //
+  // So: one request at a time. A failure waits for a slot and tries once more, because the
+  // status endpoint reports slots freeing in about five seconds, which is worth waiting for
+  // when the alternative is telling a student their town is empty.
+  const cacheKey = `${opts.lat.toFixed(2)},${opts.lng.toFixed(2)},${opts.radiusMiles},${uniqueFilters.join("|")}`;
+  const cached = businessCache.get(cacheKey);
 
-  const startedAt = Date.now();
-  const byKey = new Map<string, OverpassElement>();
-  for (const radius of tiers) {
-    const left = SEARCH_BUDGET_MS - (Date.now() - startedAt);
-    // Overpass needs a few seconds just to plan a query, so a sliver of budget buys nothing.
-    if (left < 6_000) break;
-    const allow = Math.min(tierTimeoutMs(radius), left);
-    const before = byKey.size;
+  let elements: OverpassElement[];
+  if (cached && Date.now() - cached.at < BUSINESS_CACHE_TTL_MS) {
+    elements = cached.elements;
+  } else {
     try {
-      for (const el of await runTier(radius, allow)) byKey.set(`${el.type}-${el.id}`, el);
+      elements = await runTier(opts.radiusMiles, tierTimeoutMs(opts.radiusMiles));
     } catch {
-      continue; // one tier timing out must not discard the tiers that already answered
+      await new Promise((r) => setTimeout(r, RETRY_WAIT_MS));
+      try {
+        elements = await runTier(opts.radiusMiles, tierTimeoutMs(opts.radiusMiles));
+      } catch {
+        // A stale copy is far better than a false "there is nothing near you". These are
+        // businesses; they do not move between one search and the next.
+        if (cached) {
+          elements = cached.elements;
+        } else {
+          // Nothing is known about this area, so nothing is claimed about it. Reported as a
+          // failure rather than an empty result, because telling a student there are no
+          // businesses near them is a claim this search has not earned, and it sends them off
+          // to widen a radius that was never the problem.
+          throw new Error("Business search unavailable");
+        }
+      }
     }
-    if (byKey.size >= ENOUGH_RESULTS) break;
-    if (before > 0 && byKey.size - before < DIMINISHING_RETURN) break;
+    businessCache.set(cacheKey, { at: Date.now(), elements });
   }
+
+  const byKey = new Map<string, OverpassElement>();
+  for (const el of elements) byKey.set(`${el.type}-${el.id}`, el);
   if (byKey.size === 0) return [];
 
   const seen = new Map<string, RawListing>();
