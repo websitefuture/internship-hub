@@ -312,6 +312,7 @@ export async function fetchLocalBusinesses(opts: {
       phone: tags.phone || tags["contact:phone"] || null,
       matchTag: tag?.value ?? null,
       sourceUpdated: el.timestamp ?? null,
+      source: "OpenStreetMap",
     });
   }
 
