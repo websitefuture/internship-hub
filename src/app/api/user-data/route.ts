@@ -34,16 +34,18 @@ export async function POST(req: Request) {
   if (!email) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
 
   const body = await req.json();
-  const { error } = await supabase.from("user_data").upsert(
-    {
-      user_email: email,
-      name: session.user?.name ?? "",
-      answers: body.answers ?? null,
-      results: body.results ?? null,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "user_email" },
-  );
+  // Only overwrite what this request actually carries. Answers are now saved as they are
+  // given, mid-questionnaire, and a full-row upsert would null the saved shortlist every
+  // time one of those went through.
+  const row: Record<string, unknown> = {
+    user_email: email,
+    name: session.user?.name ?? "",
+    updated_at: new Date().toISOString(),
+  };
+  if ("answers" in body) row.answers = body.answers ?? null;
+  if ("results" in body) row.results = body.results ?? null;
+
+  const { error } = await supabase.from("user_data").upsert(row, { onConflict: "user_email" });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });

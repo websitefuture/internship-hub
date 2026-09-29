@@ -86,6 +86,13 @@ function csvDownload(res: ScoredListing[]) {
   a.click();
 }
 
+// First question the student has not answered yet, so a half-finished form resumes where it
+// stopped instead of making them click past what they already told us.
+function firstUnanswered(answers: Answers): number {
+  const i = QUESTIONS.findIndex((q) => isAnswerEmpty(q, answers));
+  return i === -1 ? 0 : i;
+}
+
 function isAnswerEmpty(q: Question, answers: Answers): boolean {
   const v = answers[q.k];
   if (q.type === "many") return !(Array.isArray(v) && v.length);
@@ -400,6 +407,23 @@ export default function HomeClient() {
 
   const sessionEmail = session?.user?.email ?? null;
   const sessionName = session?.user?.name ?? null;
+
+  // Answers used to reach the account only when a search completed, so a student who
+  // answered six questions and closed the tab came back to an empty form. This persists them
+  // as they are given, debounced so that picking options quickly is one write rather than
+  // nine. It sends answers alone, which is why the API only overwrites the fields it is given.
+  useEffect(() => {
+    if (status !== "authenticated") return;
+    if (Object.keys(answers).length === 0) return;
+    const t = setTimeout(() => {
+      fetch("/api/user-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ answers }),
+      }).catch(() => {});
+    }, 900);
+    return () => clearTimeout(t);
+  }, [answers, status]);
   useEffect(() => {
     if (status === "loading") return;
     if (status === "authenticated" && sessionEmail) {
@@ -450,6 +474,9 @@ export default function HomeClient() {
             // The only navigation left here: a returning account goes to the shortlist it
             // already has rather than answering all nine questions again.
             go("res");
+          } else if (data.answers && viewRef.current === "q") {
+            // Half-finished form: pick up where they stopped rather than at question one.
+            go("q", firstUnanswered(data.answers));
           }
         })
         // Saved data is a nicety. Losing it must not affect where the student ends up, which
