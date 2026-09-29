@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { reverseGeocode } from "@/lib/geocode";
-import { ADZUNA_COUNTRIES, searchInternships } from "@/lib/jobs";
+import { ADZUNA_COUNTRIES } from "@/lib/jobs";
+import { searchAllSources } from "@/lib/sources";
 import { miles } from "@/lib/geo";
 import { fetchLocalBusinesses, radiusMilesForAnswers } from "@/lib/localBusinesses";
 import { getDriveTimes } from "@/lib/routing";
@@ -79,19 +80,17 @@ export async function POST(req: Request) {
     });
   }
 
-  if (!ADZUNA_COUNTRIES.has(countryCode)) {
-    return NextResponse.json({ results: [], coverage: false });
-  }
-
   let raw: RawListing[] = [];
   try {
-    raw = await searchInternships({ countryCode, cityLabel });
+    raw = await searchAllSources({ countryCode, cityLabel });
   } catch {
     return NextResponse.json({ results: [], coverage: true, error: "Search failed" });
   }
 
   if (raw.length === 0) {
-    return NextResponse.json({ results: [], coverage: true });
+    // Nothing found, and outside Adzuna's countries that is a coverage gap rather than a
+    // genuinely empty search, which the results screen words differently.
+    return NextResponse.json({ results: [], coverage: ADZUNA_COUNTRIES.has(countryCode) });
   }
 
   const prelim = raw

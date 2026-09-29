@@ -98,6 +98,7 @@ interface OverpassElement {
   lat?: number;
   lon?: number;
   center?: { lat: number; lon: number };
+  timestamp?: string;
   tags?: OverpassTags;
 }
 
@@ -217,7 +218,7 @@ function buildQuery(lat: number, lng: number, radiusMiles: number, filters: stri
   const west = lng - dLng;
   const east = lng + dLng;
   const clauses = filters.map((f) => `  node${f}["name"];\n  way${f}["name"];`).join("\n");
-  return `[out:json][timeout:${budget}][bbox:${south},${west},${north},${east}];\n(\n${clauses}\n);\nout center 200;`;
+  return `[out:json][timeout:${budget}][bbox:${south},${west},${north},${east}];\n(\n${clauses}\n);\nout center meta 200;`;
 }
 
 export async function fetchLocalBusinesses(opts: {
@@ -310,6 +311,7 @@ export async function fetchLocalBusinesses(opts: {
       websiteUrl: tags.website || tags["contact:website"] || null,
       phone: tags.phone || tags["contact:phone"] || null,
       matchTag: tag?.value ?? null,
+      sourceUpdated: el.timestamp ?? null,
     });
   }
 

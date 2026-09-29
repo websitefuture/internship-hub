@@ -108,6 +108,13 @@ export interface RawListing {
   // generated description (which mentions the searched role in every single result and so
   // can't distinguish one business from another).
   matchTag?: string | null;
+  // When the source last confirmed this entry: the OpenStreetMap edit timestamp for a
+  // cold-outreach business, so a student can see that an entry nobody has touched in years
+  // is worth phoning before visiting. Some OSM records here date back to 2009.
+  sourceUpdated?: string | null;
+  // Which provider this came from, shown on the result so a student can see that the app
+  // searches several places and judge each listing by where it originated.
+  source?: string;
 }
 
 export type LiveScoreParts = Record<"Commute" | "Role fit" | "Pay" | "Mode", number>;
