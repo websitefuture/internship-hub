@@ -422,6 +422,16 @@ export default function HomeClient() {
       const clearMarker = () => {
         if (justSignedIn) window.history.replaceState(null, "", window.location.pathname);
       };
+      // Set the account up from the session straight away, and move off the sign-in screen
+      // before anything touches the network. Everything below used to sit inside the fetch
+      // callback, so `user` stayed null for as long as that request took, and "Get started"
+      // sends a null user to the sign-in screen: a student who had just signed in was asked
+      // to sign in again, then landed on question one partway through the second attempt as
+      // the first request finally came back.
+      syncUser();
+      if (justSignedIn || viewRef.current === "auth") go("q", 0);
+      clearMarker();
+
       fetch("/api/user-data")
         .then((r) => r.json())
         .then((data: { answers?: Answers | null; results?: ScoredListing[] | null }) => {
@@ -437,22 +447,14 @@ export default function HomeClient() {
               setHsCity(data.answers.loc.label);
             }
             setTab(0);
+            // The only navigation left here: a returning account goes to the shortlist it
+            // already has rather than answering all nine questions again.
             go("res");
-          } else if (justSignedIn || viewRef.current === "auth") {
-            // Nothing saved yet, so send a new account into the questionnaire rather than
-            // back to the page they already read. Sitting on the sign-in screen while
-            // already signed in is never right either, so that moves on too, which covers
-            // a session that outlived the page it was created on.
-            go("q", 0);
           }
-          clearMarker();
         })
-        .catch(() => {
-          // A saved-data hiccup must not strand anyone on the sign-in screen.
-          syncUser();
-          if (justSignedIn || viewRef.current === "auth") go("q", 0);
-          clearMarker();
-        });
+        // Saved data is a nicety. Losing it must not affect where the student ends up, which
+        // has already been decided above.
+        .catch(() => {});
     } else {
       Promise.resolve().then(() => {
         const p = load<UserProfile>("profile");
