@@ -70,7 +70,13 @@ const ENOUGH_RESULTS = 50;
 // Hard ceiling on the whole search. Widening must never turn into a queue of slow tiers:
 // once this is spent the search returns what it already has rather than making a student
 // watch a spinner. In practice a dense area fills up on the first tier in well under this.
-const SEARCH_BUDGET_MS = 13_000;
+const SEARCH_BUDGET_MS = 20_000;
+// Each tier gets a workable timeout of its own rather than whatever is left of the budget.
+// Deriving it from the remainder starved the first query: with a 13s budget the opening 10mi
+// tier told Overpass [timeout:11], which a dense city cannot answer in, and Austin went from
+// 60 results to zero. The budget decides whether to start another tier, not how hard the
+// current one is allowed to try.
+const tierTimeoutMs = (radiusMiles: number) => (radiusMiles <= 15 ? 18_000 : 26_000);
 // Widening only pays while it keeps finding new places. Measured live around Ely, Nevada:
 // 10mi returns 17 businesses and 50mi returns 21, so the wider tiers spent the entire budget
 // to add four results. When a tier adds less than this, the area is simply exhausted and the
@@ -255,10 +261,11 @@ export async function fetchLocalBusinesses(opts: {
   for (const radius of tiers) {
     const left = SEARCH_BUDGET_MS - (Date.now() - startedAt);
     // Overpass needs a few seconds just to plan a query, so a sliver of budget buys nothing.
-    if (left < 5_000) break;
+    if (left < 6_000) break;
+    const allow = Math.min(tierTimeoutMs(radius), left);
     const before = byKey.size;
     try {
-      for (const el of await runTier(radius, left)) byKey.set(`${el.type}-${el.id}`, el);
+      for (const el of await runTier(radius, allow)) byKey.set(`${el.type}-${el.id}`, el);
     } catch {
       continue; // one tier timing out must not discard the tiers that already answered
     }
