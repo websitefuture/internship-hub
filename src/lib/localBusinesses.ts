@@ -1,5 +1,6 @@
 import { miles } from "./geo";
 import type { RawListing, RoleKey } from "./types";
+import { budgetFor, SAFETY_MARGIN_MS, type Deadline } from "./deadline";
 
 // High-schooler internships essentially don't exist as formal job postings (confirmed by
 // direct testing against the jobs-search API this app otherwise uses: searching "intern"
@@ -70,6 +71,11 @@ const tierTimeoutMs = (radiusMiles: number) => (radiusMiles <= 15 ? 22_000 : 30_
 // Overpass reports a freed slot in roughly five seconds, so a retry waits for one rather than
 // immediately spending the client's second attempt on the same refusal.
 const RETRY_WAIT_MS = 5_000;
+// The retry is only worth its wait if the query it buys has a real chance. This query costs
+// about 17s at any radius (see below), so a retry left with less than this is the starved
+// first tier all over again: a five-second wait spent on a query that cannot finish. When the
+// request's time budget cannot cover the wait plus this, the retry is skipped.
+const MIN_RETRY_QUERY_MS = 15_000;
 // Overpass's public instance allows very few concurrent queries per client, so the cheapest
 // way to be a good citizen of it is to ask less often. Students in the same town search the
 // same box, and this is also what stops the automatic re-run for a returning account from
@@ -227,6 +233,8 @@ export async function fetchLocalBusinesses(opts: {
   roles: RoleKey[];
   cityLabel: string;
   roleOther?: string;
+  // The search request's shared time budget. Without one, every query gets its full timeout.
+  deadline?: Deadline;
 }): Promise<RawListing[]> {
   const filters = opts.roles.length ? opts.roles.flatMap((r) => ROLE_OSM_FILTERS[r] ?? []) : DEFAULT_FILTERS;
   const uniqueFilters = Array.from(new Set(filters.length ? filters : DEFAULT_FILTERS));
@@ -236,7 +244,11 @@ export async function fetchLocalBusinesses(opts: {
   const roleNames = [...opts.roles.map((r) => ROLE_LABELS[r]), ...(opts.roleOther?.trim() ? [opts.roleOther.trim()] : [])];
   const roleLabel = roleNames.length ? roleNames.join("/") : "internship-style";
 
-  async function runTier(radiusMiles: number, budgetMs: number): Promise<OverpassElement[]> {
+  async function runTier(radiusMiles: number): Promise<OverpassElement[]> {
+    // The tier's own measured timeout, cut only if the request's budget cannot cover it. The
+    // first query starts after at most one 8s geocode, so with a 50s budget it always gets its
+    // full 22s or 30s; only a late retry can come out shorter, and that is the point of it.
+    const budgetMs = budgetFor(tierTimeoutMs(radiusMiles), opts.deadline);
     const params = new URLSearchParams();
     params.set("data", buildQuery(opts.lat, opts.lng, radiusMiles, uniqueFilters, budgetMs));
     const res = await fetch("https://overpass-api.de/api/interpreter", {
@@ -274,7 +286,12 @@ export async function fetchLocalBusinesses(opts: {
   //
   // So: one request at a time. A failure waits for a slot and tries once more, because the
   // status endpoint reports slots freeing in about five seconds, which is worth waiting for
-  // when the alternative is telling a student their town is empty.
+  // when the alternative is telling a student their town is empty. Unless the request is
+  // already too late for it: the wait plus a workable query must fit in what is left, or the
+  // retry only pushes the function past the host's limit, which ends in an error page rather
+  // than the "search failed" message the results screen knows how to show.
+  const canAffordRetry = () =>
+    !opts.deadline || opts.deadline.remaining() - SAFETY_MARGIN_MS - RETRY_WAIT_MS >= MIN_RETRY_QUERY_MS;
   const cacheKey = `${opts.lat.toFixed(2)},${opts.lng.toFixed(2)},${opts.radiusMiles},${uniqueFilters.join("|")}`;
   const cached = businessCache.get(cacheKey);
 
@@ -283,11 +300,12 @@ export async function fetchLocalBusinesses(opts: {
     elements = cached.elements;
   } else {
     try {
-      elements = await runTier(opts.radiusMiles, tierTimeoutMs(opts.radiusMiles));
+      elements = await runTier(opts.radiusMiles);
     } catch {
-      await new Promise((r) => setTimeout(r, RETRY_WAIT_MS));
       try {
-        elements = await runTier(opts.radiusMiles, tierTimeoutMs(opts.radiusMiles));
+        if (!canAffordRetry()) throw new Error("No time left for an Overpass retry");
+        await new Promise((r) => setTimeout(r, RETRY_WAIT_MS));
+        elements = await runTier(opts.radiusMiles);
       } catch {
         // A stale copy is far better than a false "there is nothing near you". These are
         // businesses; they do not move between one search and the next.

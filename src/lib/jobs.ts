@@ -1,4 +1,5 @@
 import type { RawListing } from "./types";
+import { budgetFor, type Deadline } from "./deadline";
 
 // Free job-search data via Adzuna's public API (free app_id/app_key, no credit card).
 // Coverage is real but limited to the countries Adzuna indexes, checked by the caller
@@ -42,7 +43,14 @@ function extractEmail(text: string): string | null {
   return m ? m[0] : null;
 }
 
-async function fetchPage(countryCode: string, cityLabel: string, page: number, appId: string, appKey: string): Promise<AdzunaResult[]> {
+async function fetchPage(
+  countryCode: string,
+  cityLabel: string,
+  page: number,
+  appId: string,
+  appKey: string,
+  deadline?: Deadline,
+): Promise<AdzunaResult[]> {
   const params = new URLSearchParams({
     app_id: appId,
     app_key: appKey,
@@ -52,13 +60,13 @@ async function fetchPage(countryCode: string, cityLabel: string, page: number, a
     "content-type": "application/json",
   });
   const url = `${ADZUNA_BASE}/${countryCode}/search/${page}?${params.toString()}`;
-  const res = await fetch(url, { signal: AbortSignal.timeout(12000) });
+  const res = await fetch(url, { signal: AbortSignal.timeout(budgetFor(12000, deadline)) });
   if (!res.ok) return [];
   const data = await res.json();
   return Array.isArray(data.results) ? data.results : [];
 }
 
-export async function searchInternships(opts: { countryCode: string; cityLabel: string }): Promise<RawListing[]> {
+export async function searchInternships(opts: { countryCode: string; cityLabel: string; deadline?: Deadline }): Promise<RawListing[]> {
   const appId = process.env.ADZUNA_APP_ID;
   const appKey = process.env.ADZUNA_APP_KEY;
   if (!appId || !appKey) throw new Error("Adzuna credentials not configured");
@@ -66,7 +74,7 @@ export async function searchInternships(opts: { countryCode: string; cityLabel: 
   const cc = opts.countryCode.toLowerCase();
   if (!ADZUNA_COUNTRIES.has(cc)) return [];
 
-  const pages = await Promise.all([1, 2].map((p) => fetchPage(cc, opts.cityLabel, p, appId, appKey).catch(() => [] as AdzunaResult[])));
+  const pages = await Promise.all([1, 2].map((p) => fetchPage(cc, opts.cityLabel, p, appId, appKey, opts.deadline).catch(() => [] as AdzunaResult[])));
   const seen = new Map<string, RawListing>();
 
   for (const page of pages) {

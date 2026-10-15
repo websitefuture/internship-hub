@@ -2,6 +2,7 @@ import type { RawListing } from "./types";
 import { ADZUNA_COUNTRIES, searchInternships } from "./jobs";
 import { searchBoards } from "./boards";
 import { geocodePlaces } from "./places";
+import { budgetFor, type Deadline } from "./deadline";
 
 // Listings used to come from Adzuna alone, which let one provider decide by itself what a
 // student is allowed to find. This runs several in parallel and merges them.
@@ -49,7 +50,7 @@ function stripHtml(html: string): string {
 // remote listing rather than a place that can be geocoded.
 const isRemoteLabel = (name: string) => /flexible|remote/i.test(name);
 
-async function searchMuse(cityLabel: string, wantsRemote: boolean): Promise<RawListing[]> {
+async function searchMuse(cityLabel: string, wantsRemote: boolean, deadline?: Deadline): Promise<RawListing[]> {
   // The Muse's location filter does not actually filter: asking it for "Austin, TX" returns
   // New York, San Francisco and Athens, Greece. So it is not a local source and is not
   // trusted as one; every listing it returns still gets geocoded and distance-checked like
@@ -60,7 +61,7 @@ async function searchMuse(cityLabel: string, wantsRemote: boolean): Promise<RawL
     pageNums.map(async (page) => {
       try {
         const url = `${MUSE}?level=Internship&location=${encodeURIComponent(cityLabel)}&page=${page}`;
-        const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(10000) });
+        const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(budgetFor(10000, deadline)) });
         if (!res.ok) return [] as MuseJob[];
         const data = (await res.json()) as { results?: MuseJob[] };
         return data.results ?? [];
@@ -118,6 +119,8 @@ export async function searchAllSources(opts: {
   lng: number;
   maxMiles: number;
   wantsRemote: boolean;
+  // The search request's shared time budget, handed down to every provider call.
+  deadline?: Deadline;
 }): Promise<RawListing[]> {
   // Adzuna covers 18 countries; The Muse has no country filter and is overwhelmingly US; the
   // employer boards are US-centric but carry the listings no aggregator has. Asking a provider
@@ -127,8 +130,8 @@ export async function searchAllSources(opts: {
     ADZUNA_COUNTRIES.has(opts.countryCode)
       ? searchInternships(opts).catch(() => [] as RawListing[])
       : Promise.resolve([] as RawListing[]),
-    searchMuse(opts.cityLabel, opts.wantsRemote).catch(() => [] as RawListing[]),
-    searchBoards({ lat: opts.lat, lng: opts.lng, maxMiles: opts.maxMiles }).catch(() => [] as RawListing[]),
+    searchMuse(opts.cityLabel, opts.wantsRemote, opts.deadline).catch(() => [] as RawListing[]),
+    searchBoards({ lat: opts.lat, lng: opts.lng, maxMiles: opts.maxMiles, deadline: opts.deadline }).catch(() => [] as RawListing[]),
   ]);
 
   // Order decides which copy of a duplicate survives. Employer boards go first because a

@@ -5,6 +5,7 @@ import { searchAllSources } from "@/lib/sources";
 import { miles } from "@/lib/geo";
 import { fetchLocalBusinesses, radiusMilesForAnswers } from "@/lib/localBusinesses";
 import { getDriveTimes } from "@/lib/routing";
+import { Deadline, SEARCH_BUDGET_MS } from "@/lib/deadline";
 import { scoreLive } from "@/lib/scoring";
 import type { Answers, DriveTime, LocationAnswer, RawListing, RoleKey } from "@/lib/types";
 
@@ -13,6 +14,11 @@ const PRELIM_CAP = 50;
 const HS_BUSINESS_CAP = 60;
 
 export async function POST(req: Request) {
+  // One clock for the whole request. The host kills the function at 60s, and a killed function
+  // answers with an error page instead of this route's own JSON, which the results screen
+  // words properly. Every network call below takes its timeout from this budget, so the
+  // route always answers for itself, with whatever it managed to find, before then.
+  const deadline = new Deadline(SEARCH_BUDGET_MS);
   const body = await req.json();
   const { answers, loc } = body as { answers: Answers; loc: LocationAnswer };
 
@@ -26,7 +32,7 @@ export async function POST(req: Request) {
   let countryCode = "";
   let cityLabel = loc.label;
   try {
-    const rev = await reverseGeocode(loc.lat, loc.lng);
+    const rev = await reverseGeocode(loc.lat, loc.lng, deadline);
     countryCode = rev.countryCode;
     cityLabel = rev.label;
   } catch {
@@ -45,7 +51,7 @@ export async function POST(req: Request) {
 
     let raw: RawListing[] = [];
     try {
-      raw = await fetchLocalBusinesses({ lat: loc.lat, lng: loc.lng, radiusMiles, roles, cityLabel, roleOther: answers.roleOther });
+      raw = await fetchLocalBusinesses({ lat: loc.lat, lng: loc.lng, radiusMiles, roles, cityLabel, roleOther: answers.roleOther, deadline });
     } catch {
       return NextResponse.json({ results: [], coverage: true, coldOutreach: true, error: "Search failed" });
     }
@@ -65,6 +71,7 @@ export async function POST(req: Request) {
       driveTimes = await getDriveTimes(
         { lat: loc.lat, lng: loc.lng },
         capped.map((l) => ({ lat: l.lat!, lng: l.lng! })),
+        deadline,
       );
     } catch {
       // scoreLive falls back to a straight-line estimate per listing
@@ -92,6 +99,7 @@ export async function POST(req: Request) {
       // every other source would hide listings purely for coming from a board.
       maxMiles: PRELIM_RADIUS_MILES,
       wantsRemote: answers.mode === "remote",
+      deadline,
     });
   } catch {
     return NextResponse.json({ results: [], coverage: true, error: "Search failed" });
@@ -141,6 +149,7 @@ export async function POST(req: Request) {
     driveTimes = await getDriveTimes(
       { lat: loc.lat, lng: loc.lng },
       listings.map((l) => (l.lat === null || l.lng === null ? null : { lat: l.lat, lng: l.lng })),
+      deadline,
     );
   } catch {
     // scoreLive falls back to a straight-line estimate per listing

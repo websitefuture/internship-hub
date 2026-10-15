@@ -1,6 +1,7 @@
 import type { RawListing } from "./types";
 import { geocodePlaces, type Coords } from "./places";
 import { miles } from "./geo";
+import { budgetFor, type Deadline } from "./deadline";
 
 // Internships posted directly by employers, read from the applicant-tracking systems they
 // actually use. An aggregator only carries what an employer chose to syndicate; these are
@@ -188,18 +189,18 @@ interface WdJob {
   remoteType?: string;
 }
 
-async function getJson(url: string, timeout: number): Promise<unknown> {
-  const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(timeout) });
+async function getJson(url: string, timeout: number, deadline?: Deadline): Promise<unknown> {
+  const res = await fetch(url, { headers: { "User-Agent": UA }, signal: AbortSignal.timeout(budgetFor(timeout, deadline)) });
   if (!res.ok) throw new Error(String(res.status));
   return res.json();
 }
 
-async function listBoard(b: Board): Promise<Posting[]> {
+async function listBoard(b: Board, deadline?: Deadline): Promise<Posting[]> {
   if (b.kind === "gh") {
     // Deliberately without content=true: that response is 5-9.5 MB per company against
     // 433 KB for the plain list. Descriptions are fetched later, only for the few listings
     // that survive the distance filter.
-    const d = (await getJson(`https://boards-api.greenhouse.io/v1/boards/${b.token}/jobs`, 12000)) as { jobs?: GhJob[] };
+    const d = (await getJson(`https://boards-api.greenhouse.io/v1/boards/${b.token}/jobs`, 12000, deadline)) as { jobs?: GhJob[] };
     return (d.jobs ?? [])
       .filter((j) => INTERN.test(j.title ?? ""))
       .map((j) => ({
@@ -216,7 +217,7 @@ async function listBoard(b: Board): Promise<Posting[]> {
   }
 
   if (b.kind === "lv") {
-    const d = (await getJson(`https://api.lever.co/v0/postings/${b.token}?mode=json`, 14000)) as LvJob[];
+    const d = (await getJson(`https://api.lever.co/v0/postings/${b.token}?mode=json`, 14000, deadline)) as LvJob[];
     return (Array.isArray(d) ? d : [])
       .filter((j) => INTERN.test(j.text ?? ""))
       .map((j) => ({
@@ -233,7 +234,7 @@ async function listBoard(b: Board): Promise<Posting[]> {
   }
 
   if (b.kind === "ab") {
-    const d = (await getJson(`https://api.ashbyhq.com/posting-api/job-board/${b.token}`, 14000)) as { jobs?: AbJob[] };
+    const d = (await getJson(`https://api.ashbyhq.com/posting-api/job-board/${b.token}`, 14000, deadline)) as { jobs?: AbJob[] };
     return (d.jobs ?? [])
       .filter((j) => INTERN.test(j.title ?? ""))
       .map((j) => ({
@@ -258,7 +259,9 @@ async function listBoard(b: Board): Promise<Posting[]> {
       method: "POST",
       headers: JSON_HEADERS,
       body: JSON.stringify({ appliedFacets: {}, limit: 20, offset, searchText: "intern" }),
-      signal: AbortSignal.timeout(12000),
+      // Pages run one after another, so three slow ones could take 36s by themselves. Each is
+      // capped by what the search request has left.
+      signal: AbortSignal.timeout(budgetFor(12000, deadline)),
     });
     if (!res.ok) break;
     const d = (await res.json()) as { jobPostings?: WdJob[] };
@@ -283,12 +286,12 @@ async function listBoard(b: Board): Promise<Posting[]> {
   return out;
 }
 
-async function cachedBoard(b: Board): Promise<Posting[]> {
+async function cachedBoard(b: Board, deadline?: Deadline): Promise<Posting[]> {
   const key = cacheKey(b);
   const hit = cache.get(key);
   if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.posts;
   try {
-    const posts = await listBoard(b);
+    const posts = await listBoard(b, deadline);
     cache.set(key, { at: Date.now(), posts });
     return posts;
   } catch {
@@ -317,17 +320,17 @@ function stripHtml(html: string): string {
 
 // Fetch the full description, but only for listings that already passed the distance filter.
 // Measured: 16 KB and ~110 ms each on Greenhouse, 7.6 KB and ~360 ms on Workday.
-async function hydrate(p: Posting): Promise<Posting> {
+async function hydrate(p: Posting, deadline?: Deadline): Promise<Posting> {
   try {
     if (p.ref.kind === "gh") {
-      const d = (await getJson(`https://boards-api.greenhouse.io/v1/boards/${p.ref.token}/jobs/${p.ref.id}`, 9000)) as {
+      const d = (await getJson(`https://boards-api.greenhouse.io/v1/boards/${p.ref.token}/jobs/${p.ref.id}`, 9000, deadline)) as {
         content?: string;
       };
       return { ...p, description: stripHtml(d.content ?? "") };
     }
     if (p.ref.kind === "wd") {
       const r = p.ref;
-      const d = (await getJson(`https://${r.tenant}.${r.host}.myworkdayjobs.com/wday/cxs/${r.tenant}/${r.site}${r.path}`, 9000)) as {
+      const d = (await getJson(`https://${r.tenant}.${r.host}.myworkdayjobs.com/wday/cxs/${r.tenant}/${r.site}${r.path}`, 9000, deadline)) as {
         jobPostingInfo?: { jobDescription?: string; location?: string; startDate?: string; externalUrl?: string };
       };
       const info = d.jobPostingInfo ?? {};
@@ -351,10 +354,18 @@ async function hydrate(p: Posting): Promise<Posting> {
 // than the accuracy is worth, and the shortlist shows a fraction of them anyway.
 const HYDRATE_CAP = 24;
 
-export async function searchBoards(opts: { lat: number; lng: number; maxMiles: number; budgetMs?: number }): Promise<RawListing[]> {
-  const deadline = Date.now() + (opts.budgetMs ?? 14000);
+export async function searchBoards(opts: {
+  lat: number;
+  lng: number;
+  maxMiles: number;
+  budgetMs?: number;
+  // The search request's shared time budget, separate from budgetMs (which only decides
+  // whether descriptions are worth fetching at all).
+  deadline?: Deadline;
+}): Promise<RawListing[]> {
+  const hydrateBy = Date.now() + (opts.budgetMs ?? 14000);
 
-  const lists = await Promise.all(BOARDS.map((b) => cachedBoard(b)));
+  const lists = await Promise.all(BOARDS.map((b) => cachedBoard(b, opts.deadline)));
   const posts = lists.flat();
   if (posts.length === 0) return [];
 
@@ -375,7 +386,8 @@ export async function searchBoards(opts: { lat: number; lng: number; maxMiles: n
     .sort((a, b) => (a.d ?? 1e9) - (b.d ?? 1e9))
     .slice(0, HYDRATE_CAP);
 
-  const full = Date.now() < deadline ? await Promise.all(near.map((x) => hydrate(x.p).then((p) => ({ ...x, p })))) : near;
+  const full =
+    Date.now() < hydrateBy ? await Promise.all(near.map((x) => hydrate(x.p, opts.deadline).then((p) => ({ ...x, p })))) : near;
 
   return full.map(({ p, c }) => ({
     id: `board-${p.provider.toLowerCase()}-${p.url}`,

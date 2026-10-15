@@ -1,4 +1,5 @@
 import type { GeoResult } from "./types";
+import { budgetFor, type Deadline } from "./deadline";
 
 // Free worldwide geocoding via OpenStreetMap's Nominatim (no API key, no billing).
 // Usage policy requires an identifying User-Agent and asks for light traffic
@@ -150,11 +151,15 @@ export async function searchPlaces(query: string): Promise<GeoResult[]> {
   return out;
 }
 
-export async function reverseGeocode(lat: number, lng: number): Promise<{ countryCode: string; label: string }> {
+export async function reverseGeocode(
+  lat: number,
+  lng: number,
+  deadline?: Deadline,
+): Promise<{ countryCode: string; label: string }> {
   const url = `${NOMINATIM_BASE}/reverse?format=jsonv2&addressdetails=1&lat=${lat}&lon=${lng}`;
   const res = await fetch(url, {
     headers: { "User-Agent": USER_AGENT, "Accept-Language": "en" },
-    signal: AbortSignal.timeout(8000),
+    signal: AbortSignal.timeout(budgetFor(8000, deadline)),
   });
   if (!res.ok) throw new Error(`Reverse geocoding failed: ${res.status}`);
   const row: NominatimRow = await res.json();
