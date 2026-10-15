@@ -44,7 +44,6 @@ export default function OwnVisits({
   rangeLabel: string;
   onRemoved: (visitorIds: string[]) => void;
 }) {
-  const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [all, setAll] = useState(false);
 
@@ -74,18 +73,14 @@ export default function OwnVisits({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const removeOne = async (row: VisitorRow) => {
-    setBusy(row.id);
-    setMessage("");
-    try {
-      const r = await call({ action: "remove", visitor: row.id });
-      onRemoved([row.id]);
-      setMessage(`Removed ${views(r.removed ?? 0)} (${row.device}, ${row.country}).`);
-    } catch (e) {
-      setMessage(`Couldn't remove it: ${(e as Error).message}`);
-    } finally {
-      setBusy(null);
-    }
+  // The row and the numbers update the moment Remove is pressed; the delete finishes in the
+  // background. If it fails, say so: a reload would show the visit again.
+  const removeOne = (row: VisitorRow) => {
+    onRemoved([row.id]);
+    setMessage(`Removed ${views(row.views)} (${row.device}, ${row.country}).`);
+    call({ action: "remove", visitor: row.id }).catch((e: Error) =>
+      setMessage(`Couldn't remove the ${row.device}, ${row.country} visit on the server (${e.message}). Reload and try again.`),
+    );
   };
 
   const shown = all ? rows : rows.slice(0, SHOW);
@@ -117,8 +112,8 @@ export default function OwnVisits({
                   {views(r.views)} · {r.when} · {r.pages.join(", ")}
                 </div>
               </div>
-              <button type="button" className="st-btn st-btn-quiet" onClick={() => removeOne(r)} disabled={busy !== null}>
-                {busy === r.id ? "Removing..." : "Remove"}
+              <button type="button" className="st-btn st-btn-quiet" onClick={() => removeOne(r)}>
+                Remove
               </button>
             </li>
           ))}
