@@ -8,13 +8,13 @@ import { usePathname } from "next/navigation";
 // browsers often send no referrer at all.
 //
 // What is NOT counted, so the dashboard reflects real visitors:
-// - Automated browsers (navigator.webdriver), and scanners that open a page and leave at once:
-//   a view only counts after the page has been visible for 2 seconds. A brand-new domain is
-//   visited by certificate-log scanners within minutes, and they inflated the first day.
+// - Automated browsers (navigator.webdriver), and scanners: a view only counts after the page
+//   has been visible for 2 seconds and the visitor has touched, scrolled, clicked or typed.
 // - The site owner's own devices, after "Don't count my visits" on /admin/stats. That sets one
 //   localStorage key on that device and nothing else.
 export const DONT_COUNT_KEY = "nest-dont-count";
 const VISIBLE_FOR_MS = 2000;
+const HUMAN_EVENTS = ["pointerdown", "pointermove", "touchstart", "wheel", "scroll", "keydown"] as const;
 
 // A random, anonymous id for this browser, so one device counts as one visitor even when its
 // network address changes (Wi-Fi to mobile data, or the move between hosts). It is not linked
@@ -73,23 +73,40 @@ export default function ViewTracker() {
     const referrer = document.referrer;
     const utm = new URLSearchParams(window.location.search).get("utm_source");
 
+    // A view counts once the page has been visible for 2 seconds AND a person has touched,
+    // scrolled, clicked or typed. Scanners and link checkers (Google's own check of the sign-in
+    // app's homepage and privacy page, crawlers that find a new domain within minutes) render the
+    // page but never interact, and were most of the "visitors" on internshipnest.com's first day.
     let timer: ReturnType<typeof setTimeout> | undefined;
     let sent = false;
+    let seen = false;
+    let touched = false;
+    const maybeSend = () => {
+      if (seen && touched && !sent && document.visibilityState === "visible") {
+        sent = true;
+        send(pathname, referrer, utm);
+      }
+    };
     const arm = () => {
       clearTimeout(timer);
       if (document.visibilityState !== "visible" || sent) return;
       timer = setTimeout(() => {
-        if (document.visibilityState === "visible" && !sent) {
-          sent = true;
-          send(pathname, referrer, utm);
-        }
+        seen = true;
+        maybeSend();
       }, VISIBLE_FOR_MS);
     };
+    const onTouch = () => {
+      touched = true;
+      maybeSend();
+    };
+    const opts = { passive: true, capture: true };
     arm();
     document.addEventListener("visibilitychange", arm);
+    for (const ev of HUMAN_EVENTS) window.addEventListener(ev, onTouch, opts);
     return () => {
       clearTimeout(timer);
       document.removeEventListener("visibilitychange", arm);
+      for (const ev of HUMAN_EVENTS) window.removeEventListener(ev, onTouch, opts);
     };
   }, [pathname]);
 

@@ -20,6 +20,11 @@ create table if not exists public.page_views (
 );
 create index if not exists page_views_at_idx on public.page_views (at);
 
+-- Added Oct 15 2026: which address the view used (internshipnest.com or the old vercel.app one)
+-- and which app or browser ("Instagram app", "Safari"), so /admin/stats can show who is real.
+alter table public.page_views add column if not exists site text;
+alter table public.page_views add column if not exists browser text;
+
 -- Vercel Web Analytics history, imported once before leaving Vercel, so the dashboard shows
 -- one continuous record instead of starting from zero on the day the tracker went live.
 create table if not exists public.vercel_history (

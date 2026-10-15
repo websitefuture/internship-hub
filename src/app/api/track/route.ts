@@ -33,6 +33,21 @@ function country(h: Headers): string | null {
   return null;
 }
 
+// The app or browser a view came from. In-app browsers first: their user agents also say Safari
+// or Chrome.
+function browserOf(ua: string): string {
+  if (/Instagram/i.test(ua)) return "Instagram app";
+  if (/musical_ly|TikTok|BytedanceWebview/i.test(ua)) return "TikTok app";
+  if (/FBAN|FBAV|FB_IAB/i.test(ua)) return "Facebook app";
+  if (/Snapchat/i.test(ua)) return "Snapchat app";
+  if (/Edg\//.test(ua)) return "Edge";
+  if (/SamsungBrowser/.test(ua)) return "Samsung Internet";
+  if (/Firefox|FxiOS/.test(ua)) return "Firefox";
+  if (/CriOS|Chrome\//.test(ua)) return "Chrome";
+  if (/Safari\//.test(ua)) return "Safari";
+  return "Other";
+}
+
 function clip(s: unknown, n: number): string | null {
   return typeof s === "string" && s.trim() ? s.trim().slice(0, n) : null;
 }
@@ -91,14 +106,21 @@ export async function POST(req: Request) {
   const day = new Date().toISOString().slice(0, 10);
   const visitor = deviceRaw ? visitorFromDevice(deviceRaw) : visitorFromRequest(clientIp(h), ua, day);
 
-  const { error } = await supabase.from("page_views").insert({
+  const row = {
     path,
     referrer_host: referrerHost,
     utm_source: clip(body.utm, 60)?.toLowerCase() ?? null,
     country: country(h),
     device: /mobi|android|iphone|ipad/i.test(ua) ? "mobile" : "desktop",
     visitor,
-  });
+  };
+  // Which address was used (the new domain or the old vercel.app one) and which app or browser,
+  // so the owner can tell real visitors from Instagram or TikTok apart from anything else.
+  let { error } = await supabase
+    .from("page_views")
+    .insert({ ...row, site: host?.replace(/^www\./, "").slice(0, 80) ?? null, browser: browserOf(ua) });
+  // Until sql/page_views.sql's newer columns exist, save the view without them.
+  if (error && /site|browser/.test(error.message)) ({ error } = await supabase.from("page_views").insert(row));
   if (error) console.error("[track] insert failed:", error.code, error.message);
 
   return new Response(null, { status: 204 });

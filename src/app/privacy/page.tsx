@@ -71,7 +71,8 @@ export default function PrivacyPage() {
       <h3>Analytics</h3>
       <p>
         We count page views with our own simple counter. For each view it records the page, the site that linked
-        you here, your country, and whether you are on a phone or a computer. To count how many different devices
+        you here, your country, whether you are on a phone or a computer, and which browser or app you used (for
+        example Safari or Instagram). To count how many different devices
         visit, your browser keeps a random ID in its storage. It is not linked to your name, email or account, and
         we never store your IP address. It does not use cookies, does not build a profile of you, and does not
         follow you to other websites.

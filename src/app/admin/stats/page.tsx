@@ -36,7 +36,7 @@ const RANGES = [
 type RangeKey = (typeof RANGES)[number]["key"];
 type Metric = "visitors" | "views";
 
-type View = { at: string; path: string; referrer_host: string | null; utm_source: string | null; country: string | null; device: string | null; visitor: string };
+type View = { at: string; path: string; referrer_host: string | null; utm_source: string | null; country: string | null; device: string | null; visitor: string; site?: string | null; browser?: string | null };
 type HistoryDay = { day: string; views: number; visitors: number };
 
 // ---------------------------------------------------------------- dates (YYYY-MM-DD strings)
@@ -72,8 +72,14 @@ function period(range: RangeKey, today: string, firstDay: string) {
 // ---------------------------------------------------------------- data
 async function load() {
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!);
+  const cols = "at, path, referrer_host, utm_source, country, device, visitor";
+  // site and browser exist once sql/page_views.sql has been re-run; read without them until then.
+  const readViews = async () => {
+    const full = await db.from("page_views").select(`${cols}, site, browser`).order("at").limit(50000);
+    return full.error ? db.from("page_views").select(cols).order("at").limit(50000) : full;
+  };
   const [views, history, nest] = await Promise.all([
-    db.from("page_views").select("at, path, referrer_host, utm_source, country, device, visitor").order("at").limit(50000),
+    readViews(),
     db.from("vercel_history").select("day, views, visitors").order("day"),
     db.from("ig_handled").select("comment_id", { count: "exact", head: true }),
   ]);
@@ -181,6 +187,8 @@ function visitorRows(views: View[], start: string, end: string): VisitorRow[] {
         id,
         views: rows.length,
         device: first.device === "mobile" ? "Phone" : "Computer",
+        browser: last.browser ?? null,
+        oldSite: last.site ? last.site.endsWith("vercel.app") : null,
         country: first.country ? regionName(first.country) : "Unknown country",
         source: src ? (src.utm_source ?? src.referrer_host)! : "Direct",
         when: rows.length === 1 ? timeOf(first.at) : `${timeOf(first.at)} to ${timeOf(last.at)}`,
@@ -471,6 +479,7 @@ const CSS = `
 .st-vline { font-size:14px; }
 .st-vinfo .st-note { overflow-wrap:anywhere; }
 .st-tag { display:inline-block; margin-left:8px; font-size:11px; font-weight:600; color:var(--accent); border:1px solid var(--accent); border-radius:4px; padding:0 5px; }
+.st-site { display:inline-block; margin-left:8px; font-size:11px; color:var(--ink3); border:1px solid var(--line); border-radius:4px; padding:0 5px; }
 .st-more { font-size:13px; margin-top:8px; }
 .st-own-foot { margin:14px 0 0; }
 @media (max-width: 600px) { .st-own-head .st-btn { width:100%; } }

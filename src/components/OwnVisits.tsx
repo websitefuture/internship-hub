@@ -12,6 +12,8 @@ export type VisitorRow = {
   id: string;
   views: number;
   device: string;
+  browser: string | null;
+  oldSite: boolean | null;
   country: string;
   source: string;
   when: string;
@@ -88,7 +90,7 @@ export default function OwnVisits({ rows, rangeLabel }: { rows: VisitorRow[]; ra
       setMessage(
         n
           ? `Removed ${views(n)} made from this browser. The graph and numbers above are updated.`
-          : "Nothing from this browser is left to remove. Any of your visits still in the list came from another device or network: press \"This was me\" on those.",
+          : "Nothing from this browser is left to remove. Any of your visits still in the list came from another device or network: press Remove on those.",
       );
       setMine(new Set());
       router.refresh();
@@ -123,8 +125,8 @@ export default function OwnVisits({ rows, rangeLabel }: { rows: VisitorRow[]; ra
         <div>
           <h2>Your own visits</h2>
           <p className="st-note">
-            Take your visits out of the graph and every number on this page. While you are signed in here, new visits
-            from you are not counted on any device.
+            Press Remove on any visit that was you or a robot, and it comes out of the graph and every number on this
+            page. While you are signed in here, your new visits are not counted on any device.
           </p>
         </div>
         <button type="button" className="st-btn" onClick={removeMine} disabled={busy !== null}>
@@ -144,7 +146,9 @@ export default function OwnVisits({ rows, rangeLabel }: { rows: VisitorRow[]; ra
             <li key={r.id} className={mine.has(r.id) ? "st-me" : ""}>
               <div className="st-vinfo">
                 <div className="st-vline">
-                  <strong>{r.device}</strong> · {r.country} · {r.source}
+                  <strong>{r.device}</strong>
+                  {r.browser && ` · ${r.browser}`} · {r.country} · {r.source}
+                  {r.oldSite !== null && <span className="st-site">{r.oldSite ? "old vercel.app link" : "internshipnest.com"}</span>}
                   {mine.has(r.id) && <span className="st-tag">This browser</span>}
                 </div>
                 <div className="st-note">
@@ -152,7 +156,7 @@ export default function OwnVisits({ rows, rangeLabel }: { rows: VisitorRow[]; ra
                 </div>
               </div>
               <button type="button" className="st-btn st-btn-quiet" onClick={() => removeOne(r)} disabled={busy !== null}>
-                {busy === r.id ? "Removing..." : "This was me"}
+                {busy === r.id ? "Removing..." : "Remove"}
               </button>
             </li>
           ))}
