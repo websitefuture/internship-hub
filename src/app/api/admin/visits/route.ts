@@ -33,9 +33,9 @@ export async function POST(req: Request) {
   if (body.action === "remove-mine") {
     const ids = ownVisitorIds(req.headers, device, FIRST_DAY);
     if (!ids.length) return NextResponse.json({ removed: 0 });
-    const { count, error } = await db.from("page_views").delete({ count: "exact" }).in("visitor", ids);
+    const { data, error } = await db.from("page_views").delete().in("visitor", ids).select("visitor");
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json({ removed: count ?? 0 });
+    return NextResponse.json({ removed: data.length, ids: [...new Set(data.map((r) => r.visitor as string))] });
   }
 
   if (body.action === "remove") {

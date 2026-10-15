@@ -5,21 +5,9 @@ import { DEVICE_KEY, DONT_COUNT_KEY } from "@/components/ViewTracker";
 
 // The visitor list on /admin/stats. Opening the page on a device marks that device as the
 // owner's: it is never counted again, and everything it was counted for before is deleted on the
-// spot. Any other visitor (a robot, say) can be removed with its own Remove button.
-//
-// After a deletion the page reloads in full so the graph and totals show the new numbers.
-// (Next.js's in-place refresh, router.refresh(), came back as a 503 from Netlify, which left the
-// old graph on screen as though nothing had been removed.)
-const FLASH_KEY = "nest-stats-flash";
-
-function reloadWith(message: string) {
-  try {
-    sessionStorage.setItem(FLASH_KEY, message);
-  } catch {
-    // storage blocked; the reload still shows the new numbers
-  }
-  window.location.reload();
-}
+// spot. Any other visitor (a robot, say) can be removed with its own Remove button. Removed
+// visitors are handed to onRemoved, which takes them out of the graph and totals in the browser
+// straight away, without reloading the page.
 
 export type VisitorRow = {
   id: string;
@@ -33,13 +21,13 @@ export type VisitorRow = {
   pages: string[];
 };
 
-async function call(body: object): Promise<{ removed?: number; error?: string }> {
+async function call(body: object): Promise<{ removed?: number; ids?: string[]; error?: string }> {
   const res = await fetch("/api/admin/visits", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const json = (await res.json().catch(() => ({}))) as { removed?: number; error?: string };
+  const json = (await res.json().catch(() => ({}))) as { removed?: number; ids?: string[]; error?: string };
   if (!res.ok) throw new Error(json.error ?? `status ${res.status}`);
   return json;
 }
@@ -47,21 +35,25 @@ async function call(body: object): Promise<{ removed?: number; error?: string }>
 const views = (n: number) => `${n} page view${n === 1 ? "" : "s"}`;
 const SHOW = 25;
 
-export default function OwnVisits({ rows, rangeLabel }: { rows: VisitorRow[]; rangeLabel: string }) {
+export default function OwnVisits({
+  rows,
+  rangeLabel,
+  onRemoved,
+}: {
+  rows: VisitorRow[];
+  rangeLabel: string;
+  onRemoved: (visitorIds: string[]) => void;
+}) {
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [all, setAll] = useState(false);
 
   useEffect(() => {
-    let flash: string | null = null;
     try {
-      flash = sessionStorage.getItem(FLASH_KEY);
-      sessionStorage.removeItem(FLASH_KEY);
       localStorage.setItem(DONT_COUNT_KEY, "1");
     } catch {
       // storage blocked; the signed-in check on the server still skips the owner
     }
-    if (flash) void Promise.resolve(flash).then(setMessage);
 
     let device: string | null = null;
     try {
@@ -72,9 +64,14 @@ export default function OwnVisits({ rows, rangeLabel }: { rows: VisitorRow[]; ra
     call({ action: "remove-mine", device })
       .then((r) => {
         const n = r.removed ?? 0;
-        if (n) reloadWith(`Removed ${views(n)} made from this device. It won't be counted again.`);
+        if (n) {
+          onRemoved(r.ids ?? []);
+          setMessage(`Removed ${views(n)} made from this device. It won't be counted again.`);
+        }
       })
       .catch(() => {});
+    // Once per page load; onRemoved only filters the parent's data.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const removeOne = async (row: VisitorRow) => {
@@ -82,9 +79,11 @@ export default function OwnVisits({ rows, rangeLabel }: { rows: VisitorRow[]; ra
     setMessage("");
     try {
       const r = await call({ action: "remove", visitor: row.id });
-      reloadWith(`Removed ${views(r.removed ?? 0)} (${row.device}, ${row.country}). The graph and numbers above are updated.`);
+      onRemoved([row.id]);
+      setMessage(`Removed ${views(r.removed ?? 0)} (${row.device}, ${row.country}).`);
     } catch (e) {
       setMessage(`Couldn't remove it: ${(e as Error).message}`);
+    } finally {
       setBusy(null);
     }
   };
