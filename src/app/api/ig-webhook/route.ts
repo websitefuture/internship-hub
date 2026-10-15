@@ -98,27 +98,55 @@ async function claimComment(commentId: string, username: string): Promise<boolea
   return false;
 }
 
-async function replyToComment(commentId: string, message: string) {
-  const res = await fetch(`${GRAPH}/${commentId}/replies`, {
+// Posted publicly when the DM can't reach the commenter, usually because their account is
+// private or their message settings block requests. Wording chosen by the account owner.
+const UNDELIVERABLE_REPLY =
+  "Unable to send link: your account is private. To receive it, send a DM to this account or change your account settings.";
+
+class GraphError extends Error {
+  constructor(readonly status: number, readonly code: number | undefined, message: string) {
+    super(message);
+  }
+}
+
+// Graph error codes that are about us, not the recipient: an expired or bad token, and the
+// various rate limits. A failed DM with one of these must not be blamed on the commenter's
+// privacy settings.
+const NOT_THE_RECIPIENT = new Set([1, 2, 4, 17, 32, 102, 190, 341, 613]);
+
+function undeliverableToRecipient(err: unknown): boolean {
+  return err instanceof GraphError && err.status >= 400 && err.status < 500 &&
+    !(err.code !== undefined && NOT_THE_RECIPIENT.has(err.code));
+}
+
+async function graphPost(path: string, body: unknown, label: string) {
+  const res = await fetch(`${GRAPH}/${path}`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${ACCESS_TOKEN}` },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify(body),
     signal: AbortSignal.timeout(8000),
   });
-  if (!res.ok) throw new Error(`reply ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  if (!res.ok) {
+    const text = await res.text();
+    let code: number | undefined;
+    try {
+      code = (JSON.parse(text) as { error?: { code?: number } }).error?.code;
+    } catch {
+      // non-JSON error body; leave the code unknown
+    }
+    throw new GraphError(res.status, code, `${label} ${res.status}: ${text.slice(0, 200)}`);
+  }
+}
+
+async function replyToComment(commentId: string, message: string) {
+  await graphPost(`${commentId}/replies`, { message }, "reply");
 }
 
 async function sendPrivateReply(commentId: string, text: string) {
   // The recipient is the comment, not the person: Meta resolves it to the commenter and
   // attaches a link back to the post. This is the only way to message someone who has never
   // messaged the account first.
-  const res = await fetch(`${GRAPH}/${IG_USER_ID}/messages`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${ACCESS_TOKEN}` },
-    body: JSON.stringify({ recipient: { comment_id: commentId }, message: { text } }),
-    signal: AbortSignal.timeout(8000),
-  });
-  if (!res.ok) throw new Error(`dm ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  await graphPost(`${IG_USER_ID}/messages`, { recipient: { comment_id: commentId }, message: { text } }, "dm");
 }
 
 export async function POST(req: Request) {
@@ -153,8 +181,16 @@ export async function POST(req: Request) {
       try {
         if (!(await claimComment(commentId, username))) continue;
 
+        // DM first, so the public reply can say what actually happened.
+        try {
+          await sendPrivateReply(commentId, `sent it over, here you go: ${LINK}`);
+        } catch (dmErr) {
+          if (!undeliverableToRecipient(dmErr)) throw dmErr;
+          console.warn("[ig-webhook]", commentId, "dm undeliverable:", dmErr instanceof Error ? dmErr.message : dmErr);
+          await replyToComment(commentId, UNDELIVERABLE_REPLY);
+          continue;
+        }
         await replyToComment(commentId, `sent it over${username ? ` @${username}` : ""}`);
-        await sendPrivateReply(commentId, `sent it over, here you go: ${LINK}`);
       } catch (err) {
         // Logged, not thrown. Meta retries any non-200, and a retry cannot help when the
         // failure is permanent, such as a comment older than the 7 day window, so one bad

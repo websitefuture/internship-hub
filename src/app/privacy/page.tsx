@@ -74,6 +74,14 @@ export default function PrivacyPage() {
         of you, and does not follow you to other websites.
       </p>
 
+      <h3>Instagram comments</h3>
+      <p>
+        If you comment the keyword on one of our Instagram posts asking for the link, Instagram sends us that comment.
+        We reply to it, send you the link by direct message, and store the comment ID and your Instagram username so
+        we never message you twice for the same comment. We do not store the comment text or anything else from your
+        profile. Email us to have that record deleted.
+      </p>
+
       <h2>Cookies and browser storage</h2>
       <p>We keep this deliberately small:</p>
       <ul>
@@ -106,6 +114,10 @@ export default function PrivacyPage() {
         <li>
           <strong>Vercel</strong>: hosts the site and provides the cookieless analytics described above. Standard
           server logs, including IP addresses, are processed as part of hosting.
+        </li>
+        <li>
+          <strong>Meta (Instagram)</strong>: delivers comments on our posts and carries our replies and direct
+          messages, if you comment asking for the link.
         </li>
         <li>
           <strong>Adzuna</strong>: the live jobs search. It receives the city name and country you are searching, not
