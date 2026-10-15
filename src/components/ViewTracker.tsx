@@ -20,7 +20,7 @@ const VISIBLE_FOR_MS = 2000;
 // network address changes (Wi-Fi to mobile data, or the move between hosts). It is not linked
 // to a name, email or account, and never leaves the site. Without storage it is simply omitted
 // and the server falls back to its per-day address-based count.
-const DEVICE_KEY = "nest-device";
+export const DEVICE_KEY = "nest-device";
 function deviceId(): string | null {
   try {
     let id = localStorage.getItem(DEVICE_KEY);

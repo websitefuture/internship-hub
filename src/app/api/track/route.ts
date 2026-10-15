@@ -1,5 +1,5 @@
 import { createClient } from "@supabase/supabase-js";
-import crypto from "crypto";
+import { DEVICE_ID_RE, visitorFromDevice, visitorFromRequest } from "@/lib/visitorId";
 
 // The site's own page-view counter (see sql/page_views.sql). Host-agnostic on purpose: it reads
 // whichever country header the current host sets, so it keeps working after a move off Vercel.
@@ -9,7 +9,6 @@ import crypto from "crypto";
 // without identifying anyone.
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!);
-const SALT = process.env.AUTH_SECRET ?? "";
 
 const BOT = /bot|crawl|spider|slurp|preview|facebookexternalhit|headless|lighthouse|pingdom|uptime/i;
 
@@ -88,11 +87,9 @@ export async function POST(req: Request) {
   // can't be matched back to the id in anyone's browser. Fallback for browsers without storage:
   // the old per-day hash of address and browser, which can overcount a device that switches
   // networks but stores no address either.
-  const deviceRaw = typeof body.device === "string" && /^[0-9a-f-]{36}$/i.test(body.device) ? body.device : null;
+  const deviceRaw = typeof body.device === "string" && DEVICE_ID_RE.test(body.device) ? body.device : null;
   const day = new Date().toISOString().slice(0, 10);
-  const visitor = deviceRaw
-    ? "d" + crypto.createHash("sha256").update(`${SALT}|device|${deviceRaw}`).digest("hex").slice(0, 15)
-    : crypto.createHash("sha256").update(`${SALT}|${clientIp(h)}|${ua}|${day}`).digest("hex").slice(0, 16);
+  const visitor = deviceRaw ? visitorFromDevice(deviceRaw) : visitorFromRequest(clientIp(h), ua, day);
 
   const { error } = await supabase.from("page_views").insert({
     path,

@@ -5,6 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import { auth } from "@/auth";
 import { loadInstagram, type IgStats } from "@/lib/instagram";
 import CountMeToggle from "@/components/CountMeToggle";
+import StatsChart, { type ChartPoint } from "@/components/StatsChart";
 
 // Private traffic dashboard, laid out like Vercel's: pick a time range, pick Visitors or Page
 // views for the chart, and see what drove traffic in that range. Reads the site's own tracker
@@ -101,13 +102,15 @@ function totals(views: View[], history: HistoryDay[], start: string, end: string
   return { views: v, visitors: seen.size + h };
 }
 
-type Point = { label: string; tip: string; views: number; visitors: number };
+type Point = ChartPoint;
+const longDay = (d: string) =>
+  new Date(d + "T12:00:00Z").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 
 function series(range: RangeKey, views: View[], history: HistoryDay[], start: string, end: string): Point[] {
   if (range === "today") {
     const pts: Point[] = Array.from({ length: 24 }, (_, h) => ({
       label: h === 0 ? "12am" : h < 12 ? `${h}am` : h === 12 ? "12pm" : `${h - 12}pm`,
-      tip: "",
+      full: "",
       views: 0,
       visitors: 0,
     }));
@@ -118,7 +121,7 @@ function series(range: RangeKey, views: View[], history: HistoryDay[], start: st
       pts[h].views++;
       sets[h].add(r.visitor);
     }
-    pts.forEach((p, i) => { p.visitors = sets[i].size; p.tip = `${p.label}: ${fmt(p.views)} page views, ${fmt(p.visitors)} visitors`; });
+    pts.forEach((p, i) => { p.visitors = sets[i].size; p.full = `${p.label}, ${longDay(start)}`; });
     return pts;
   }
   const byDay = new Map<string, { views: number; set: Set<string>; hist: number }>();
@@ -133,7 +136,7 @@ function series(range: RangeKey, views: View[], history: HistoryDay[], start: st
   }
   return [...byDay.entries()].map(([d, b]) => {
     const visitors = b.set.size + b.hist;
-    return { label: shortDay(d), tip: `${fmtDay(d)}: ${fmt(b.views)} page views, ${fmt(visitors)} visitors`, views: b.views, visitors };
+    return { label: shortDay(d), full: longDay(d) + (d < FIRST_TRACKED_DAY ? " (from Vercel)" : ""), views: b.views, visitors };
   });
 }
 
@@ -175,51 +178,6 @@ function Delta({ now, prev, show }: { now: number; prev: number; show: boolean }
     <span className={`st-delta ${cls}`}>
       {pct > 0 ? "▲" : pct < 0 ? "▼" : ""} {Math.abs(pct)}% vs previous period
     </span>
-  );
-}
-
-// The SVG scales with its box, text included, so phones get their own narrower drawing to keep
-// the axis labels readable.
-function Chart({ pts, metric, W, className }: { pts: Point[]; metric: Metric; W: number; className: string }) {
-  const H = Math.round(W * 0.3), padL = 36, padR = 8, padB = 22, padT = 10;
-  const vals = pts.map((p) => p[metric]);
-  const max = Math.max(1, ...vals);
-  const raw = max / 4, p10 = Math.pow(10, Math.floor(Math.log10(raw)));
-  const step = Math.max(1, (raw / p10 <= 1 ? 1 : raw / p10 <= 2 ? 2 : raw / p10 <= 5 ? 5 : 10) * p10);
-  const top = Math.ceil(max / step) * step;
-  const iw = W - padL - padR, ih = H - padB - padT;
-  const n = pts.length;
-  const x = (i: number) => padL + (n === 1 ? iw / 2 : (i / (n - 1)) * iw);
-  const y = (v: number) => padT + ih - (v / top) * ih;
-  const line = pts.map((pt, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(pt[metric]).toFixed(1)}`).join(" ");
-  const area = `${line} L${x(n - 1).toFixed(1)},${padT + ih} L${x(0).toFixed(1)},${padT + ih} Z`;
-  const ticks: number[] = [];
-  for (let v = 0; v <= top; v += step) ticks.push(v);
-  const every = Math.max(1, Math.ceil(n / (W < 500 ? 5 : 9)));
-  const slot = n > 1 ? iw / (n - 1) : iw;
-  return (
-    <svg viewBox={`0 0 ${W} ${H}`} className={`st-chart ${className}`} role="img" aria-label={`${metric} over time`}>
-      {ticks.map((v) => (
-        <g key={v}>
-          <line x1={padL} x2={W - padR} y1={y(v)} y2={y(v)} className="st-gridline" />
-          <text x={padL - 6} y={y(v) + 4} textAnchor="end" className="st-axis">{fmt(v)}</text>
-        </g>
-      ))}
-      <path d={area} className="st-area" />
-      <path d={line} className="st-line" />
-      {pts.map((pt, i) => (
-        <g key={i}>
-          {n <= 40 && <circle cx={x(i)} cy={y(pt[metric])} r={2.5} className="st-dot" />}
-          <rect x={x(i) - slot / 2} y={padT} width={slot} height={ih} fill="transparent">
-            <title>{pt.tip}</title>
-          </rect>
-          {(i % every === 0 || i === n - 1) && (i === n - 1 || n - 1 - i >= every / 2) && (
-            // First and last labels hug the plot edges so they are never cut off.
-            <text x={x(i)} y={H - 5} textAnchor={i === 0 ? "start" : i === n - 1 ? "end" : "middle"} className="st-axis">{pt.label}</text>
-          )}
-        </g>
-      ))}
-    </svg>
   );
 }
 
@@ -391,10 +349,9 @@ export default async function StatsPage(props: PageProps<"/admin/stats">) {
             </Link>
           ))}
         </div>
-        <Chart pts={pts} metric={metric} W={900} className="st-desk" />
-        <Chart pts={pts} metric={metric} W={380} className="st-mob" />
+        <StatsChart pts={pts} metric={metric} />
         <p className="st-note">
-          Showing {metric === "visitors" ? "visitors" : "page views"} for {label.toLowerCase()}. Hover the chart for exact numbers.
+          Showing {metric === "visitors" ? "visitors" : "page views"} for {label.toLowerCase()}. Move your cursor over the chart (or drag a finger on a phone) to see each day&apos;s numbers.
           {partly && " Days before Oct 15 come from Vercel and count visitors once per day."}
         </p>
       </section>
@@ -458,6 +415,17 @@ const CSS = `
 .st-area { fill:var(--accent-soft); }
 .st-line { fill:none; stroke:var(--accent); stroke-width:2; stroke-linejoin:round; }
 .st-dot { fill:var(--accent); }
+.st-ichart { position:relative; margin:12px 16px; touch-action:pan-y; cursor:crosshair; user-select:none; }
+.st-ichart svg { display:block; }
+.st-guide { stroke:var(--ink3); stroke-width:1; stroke-dasharray:3 3; }
+.st-hdot { fill:var(--accent); stroke:var(--card); stroke-width:2; }
+.st-tip { position:absolute; top:0; pointer-events:none; background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 10px; font-size:13px; box-shadow:0 6px 18px rgba(0,0,0,.25); z-index:2; }
+.st-tip div { display:flex; justify-content:space-between; gap:12px; color:var(--ink2); }
+.st-tip b { color:var(--ink); font-variant-numeric:tabular-nums; }
+.st-tip .st-tip-date { color:var(--ink3); font-size:12px; margin-bottom:4px; }
+.st-tip .st-tip-on { color:var(--accent); }
+.st-msg { color:var(--ink2); margin-top:4px; }
+.st-countme p { margin:0; }
 .st-note { color:var(--ink3); font-size:12px; }
 .st-grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
 .st-grid2 .st-card { margin-bottom:0; }
