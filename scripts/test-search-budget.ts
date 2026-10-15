@@ -174,7 +174,7 @@ const scenarios: Scenario[] = [
       if (url.includes("nominatim")) return after(7_500, init, () => json(place("Dallas", "Texas")));
       return hang(init);
     },
-    // Mirror 10s, then main with its full 22s, then no time for a retry.
+    // Mirror 10s, then main with its full 30s, then no time for a retry: 7.5 + 10 + 30 = 47.5s.
     expect: (b, c) => searchFailed(b) ?? callCount(c, 1, 1),
   },
   {
