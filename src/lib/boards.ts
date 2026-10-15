@@ -20,7 +20,7 @@ import { budgetFor, type Deadline } from "./deadline";
 //   in the Bay Area and New York. The Workday tenants are where the rest of the country shows
 //   up: ConocoPhillips alone posts internships in Houston, Bartlesville and Kenedy.
 
-const UA = "internship-nest/1.0 (+https://internship-nest.vercel.app)";
+const UA = "internship-nest/1.0 (+https://internshipnest.com)";
 const JSON_HEADERS = { "User-Agent": UA, "Content-Type": "application/json", Accept: "application/json" };
 
 // Matches "Intern", "Internship", "Co-op". Anchored on word boundaries because a plain

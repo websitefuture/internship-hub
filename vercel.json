@@ -1,0 +1,10 @@
+{
+  "redirects": [
+    {
+      "source": "/:path((?!api/ig-webhook$).*)",
+      "has": [{ "type": "host", "value": "internship-nest.vercel.app" }],
+      "destination": "https://internshipnest.com/:path",
+      "permanent": true
+    }
+  ]
+}

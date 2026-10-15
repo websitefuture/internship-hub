@@ -18,7 +18,7 @@ import { budgetFor, type Deadline } from "./deadline";
 // search genuinely requires a free key from developer.usajobs.gov).
 
 const MUSE = "https://www.themuse.com/api/public/jobs";
-const UA = "internship-nest/1.0 (+https://internship-nest.vercel.app)";
+const UA = "internship-nest/1.0 (+https://internshipnest.com)";
 
 interface MuseJob {
   id?: number;

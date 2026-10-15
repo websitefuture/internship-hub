@@ -25,7 +25,7 @@ const APP_SECRET = process.env.IG_APP_SECRET ?? "";
 const ACCESS_TOKEN = process.env.IG_ACCESS_TOKEN ?? "";
 const IG_USER_ID = process.env.IG_USER_ID ?? "";
 const KEYWORD = (process.env.IG_KEYWORD ?? "nest").toLowerCase();
-const LINK = process.env.IG_LINK ?? "https://internship-nest.vercel.app";
+const LINK = process.env.IG_LINK ?? "https://internshipnest.com/?utm_source=instagram";
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!);
 
