@@ -67,7 +67,12 @@ export const MAX_RADIUS_MILES = 50;
 // These are generous because the public instance genuinely is slow for this query: measured
 // from Campbell, California, it took 14.8s to 28.8s for the same request. Cutting them back
 // does not make the search faster, it only makes it come back empty.
-const tierTimeoutMs = (radiusMiles: number) => (radiusMiles <= 15 ? 22_000 : 30_000);
+//
+// The same 30s at every radius, because the cost of this query does not depend on radius (see
+// fetchLocalBusinesses). Searches of 15 miles or less used to get 22s, below the 28.8s already
+// measured. On 2026-10-15 the main instance took 27.9s for an Austin, 15-mile healthcare
+// search, so every one of them timed out, retried, timed out again, and said "Search failed".
+const tierTimeoutMs: (radiusMiles: number) => number = () => 30_000;
 // Overpass reports a freed slot in roughly five seconds, so a retry waits for one rather than
 // immediately spending the client's second attempt on the same refusal.
 const RETRY_WAIT_MS = 5_000;
