@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { auth } from "@/auth";
 import { loadInstagram, type IgStats } from "@/lib/instagram";
-import CountMeToggle from "@/components/CountMeToggle";
+import OwnVisits, { type VisitorRow } from "@/components/OwnVisits";
 import StatsChart, { type ChartPoint } from "@/components/StatsChart";
 
 // Private traffic dashboard, laid out like Vercel's: pick a time range, pick Visitors or Page
@@ -157,6 +157,36 @@ function breakdown(views: View[], start: string, end: string, key: (r: View) => 
     .map(([label, e]) => ({ label, views: e.views, visitors: e.set.size }))
     .sort((a, b) => b.visitors - a.visitors || b.views - a.views)
     .slice(0, 10);
+}
+
+const timeOf = (iso: string) =>
+  new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: TZ });
+
+/** One row per visitor in the period, most page views first, for "Your own visits". */
+function visitorRows(views: View[], start: string, end: string): VisitorRow[] {
+  const m = new Map<string, { rows: View[] }>();
+  for (const r of views) {
+    const d = dayOf(r.at);
+    if (d < start || d > end) continue;
+    const e = m.get(r.visitor) ?? { rows: [] };
+    e.rows.push(r);
+    m.set(r.visitor, e);
+  }
+  return [...m.entries()]
+    .sort(([, a], [, b]) => b.rows.length - a.rows.length || b.rows[b.rows.length - 1].at.localeCompare(a.rows[a.rows.length - 1].at))
+    .map(([id, { rows }]) => {
+      const first = rows[0], last = rows[rows.length - 1];
+      const src = rows.find((r) => r.utm_source || r.referrer_host);
+      return {
+        id,
+        views: rows.length,
+        device: first.device === "mobile" ? "Phone" : "Computer",
+        country: first.country ? regionName(first.country) : "Unknown country",
+        source: src ? (src.utm_source ?? src.referrer_host)! : "Direct",
+        when: rows.length === 1 ? timeOf(first.at) : `${timeOf(first.at)} to ${timeOf(last.at)}`,
+        pages: [...new Set(rows.map((r) => r.path))].slice(0, 5),
+      };
+    });
 }
 
 const regionName = (() => {
@@ -313,6 +343,7 @@ export default async function StatsPage(props: PageProps<"/admin/stats">) {
   const sources = breakdown(data.views, w.start, w.end, (r) => r.utm_source ?? r.referrer_host ?? "Direct / unknown");
   const countries = breakdown(data.views, w.start, w.end, (r) => (r.country ? regionName(r.country) : "Unknown"));
   const devices = breakdown(data.views, w.start, w.end, (r) => (r.device === "mobile" ? "Phone" : "Computer"));
+  const visitorList = visitorRows(data.views, w.start, w.end);
   const onlyHistory = w.end < FIRST_TRACKED_DAY;
   const partly = w.start < FIRST_TRACKED_DAY;
   const panelNote = onlyHistory ? "Breakdowns start on Oct 15, when the site began counting visits itself." : undefined;
@@ -356,6 +387,8 @@ export default async function StatsPage(props: PageProps<"/admin/stats">) {
         </p>
       </section>
 
+      <OwnVisits rows={visitorList} rangeLabel={label} />
+
       <div className="st-grid2">
         <Panel title="Pages" rows={pages} note={panelNote} />
         <Panel title="Where visitors came from" rows={sources} note={panelNote} />
@@ -365,7 +398,6 @@ export default async function StatsPage(props: PageProps<"/admin/stats">) {
 
       <section className="st-card st-row">
         <div><span className="st-label">NEST comments answered</span><span className="st-value st-small">{fmt(data.nest)}</span></div>
-        <CountMeToggle />
       </section>
 
       <Instagram ig={ig} />
@@ -425,7 +457,23 @@ const CSS = `
 .st-tip .st-tip-date { color:var(--ink3); font-size:12px; margin-bottom:4px; }
 .st-tip .st-tip-on { color:var(--accent); }
 .st-msg { color:var(--ink2); margin-top:4px; }
-.st-countme p { margin:0; }
+.st-own-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
+.st-own-head p { margin:4px 0 0; max-width:560px; }
+.st-own-sub { font-size:13px; color:var(--ink2); margin:16px 0 4px; }
+.st-btn { font:inherit; font-size:13px; font-weight:600; padding:8px 12px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; white-space:nowrap; }
+.st-btn:disabled { opacity:.6; cursor:default; }
+.st-btn-quiet { background:transparent; color:var(--accent); padding:5px 10px; font-weight:500; }
+.st-btn-quiet:hover:not(:disabled) { background:var(--accent-soft); }
+.st-visitors { list-style:none; margin:0; padding:0; }
+.st-visitors li { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px 0; border-top:1px solid var(--grid); }
+.st-visitors li.st-me { background:var(--accent-soft); margin:0 -8px; padding:8px; border-radius:6px; }
+.st-vinfo { min-width:0; }
+.st-vline { font-size:14px; }
+.st-vinfo .st-note { overflow-wrap:anywhere; }
+.st-tag { display:inline-block; margin-left:8px; font-size:11px; font-weight:600; color:var(--accent); border:1px solid var(--accent); border-radius:4px; padding:0 5px; }
+.st-more { font-size:13px; margin-top:8px; }
+.st-own-foot { margin:14px 0 0; }
+@media (max-width: 600px) { .st-own-head .st-btn { width:100%; } }
 .st-note { color:var(--ink3); font-size:12px; }
 .st-grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
 .st-grid2 .st-card { margin-bottom:0; }

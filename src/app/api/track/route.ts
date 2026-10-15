@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
-import { DEVICE_ID_RE, visitorFromDevice, visitorFromRequest } from "@/lib/visitorId";
+import { auth } from "@/auth";
+import { clientIp, DEVICE_ID_RE, visitorFromDevice, visitorFromRequest } from "@/lib/visitorId";
 
 // The site's own page-view counter (see sql/page_views.sql). Host-agnostic on purpose: it reads
 // whichever country header the current host sets, so it keeps working after a move off Vercel.
@@ -10,17 +11,12 @@ import { DEVICE_ID_RE, visitorFromDevice, visitorFromRequest } from "@/lib/visit
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!);
 
-const BOT = /bot|crawl|spider|slurp|preview|facebookexternalhit|headless|lighthouse|pingdom|uptime/i;
+const ADMINS = (process.env.ADMIN_EMAILS ?? "")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
 
-function clientIp(h: Headers): string {
-  return (
-    h.get("x-nf-client-connection-ip") ??
-    h.get("cf-connecting-ip") ??
-    h.get("x-real-ip") ??
-    h.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    ""
-  );
-}
+const BOT = /bot|crawl|spider|slurp|preview|facebookexternalhit|headless|lighthouse|pingdom|uptime/i;
 
 function country(h: Headers): string | null {
   const direct = h.get("x-vercel-ip-country") ?? h.get("cf-ipcountry") ?? h.get("x-country");
@@ -87,6 +83,10 @@ export async function POST(req: Request) {
   // can't be matched back to the id in anyone's browser. Fallback for browsers without storage:
   // the old per-day hash of address and browser, which can overcount a device that switches
   // networks but stores no address either.
+  // The site owner, while signed in to the stats page on this browser, is never counted.
+  const email = (await auth())?.user?.email?.toLowerCase();
+  if (email && ADMINS.includes(email)) return new Response(null, { status: 204 });
+
   const deviceRaw = typeof body.device === "string" && DEVICE_ID_RE.test(body.device) ? body.device : null;
   const day = new Date().toISOString().slice(0, 10);
   const visitor = deviceRaw ? visitorFromDevice(deviceRaw) : visitorFromRequest(clientIp(h), ua, day);
