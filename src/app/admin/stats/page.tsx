@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { auth } from "@/auth";
 import { loadInstagram, type IgStats } from "@/lib/instagram";
+import CountMeToggle from "@/components/CountMeToggle";
 
 // Private all-time traffic dashboard. Reads the site's own tracker (sql/page_views.sql) and the
 // Vercel history imported before the move, so the record is continuous across hosts.
@@ -20,17 +21,21 @@ type Day = { day: string; views: number; visitors: number; from: "tracker" | "ve
 
 // The day the site's own tracker went live; everything earlier is imported Vercel history.
 const FIRST_TRACKED_DAY = "2026-10-15";
+// From this day on, each browser carries an anonymous device id, so devices can be counted once
+// across days. Earlier days (and Vercel history) only had per-day counts.
+const DEVICE_IDS_FROM = "2026-10-15";
 type Row = { label: string; views: number };
 
 async function load() {
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!);
-  const [daily, history, sources, paths, countries, nest] = await Promise.all([
+  const [daily, history, sources, paths, countries, nest, devices] = await Promise.all([
     db.from("pv_daily").select("day, views, visitors"),
     db.from("vercel_history").select("day, views, visitors"),
     db.from("pv_sources").select("source, views").order("views", { ascending: false }).limit(12),
     db.from("pv_paths").select("path, views").order("views", { ascending: false }).limit(12),
     db.from("pv_countries").select("country, views").order("views", { ascending: false }).limit(12),
     db.from("ig_handled").select("comment_id", { count: "exact", head: true }),
+    db.from("pv_devices").select("devices").maybeSingle(),
   ]);
 
   // One continuous record: imported Vercel days, then tracker days. Where both exist, the
@@ -46,6 +51,7 @@ async function load() {
     paths: (paths.data ?? []).map((r) => ({ label: r.path, views: r.views })),
     countries: (countries.data ?? []).map((r) => ({ label: r.country, views: r.views })),
     nest: nest.count ?? 0,
+    devices: (devices.data as { devices?: number } | null)?.devices ?? 0,
     error: daily.error?.message ?? history.error?.message ?? null,
   };
 }
@@ -233,7 +239,8 @@ export default async function StatsPage() {
   // (different devices, each counted once per day; Vercel counts them the same way).
   const tiles: [string, string, string][] = [
     ["Page views", fmt(total), `every page load, reloads included, ${since}`],
-    ["Visitors", fmt(totalVisitors), `different devices, counted once per day, ${since}`],
+    ["Visitors", fmt(totalVisitors), `devices counted once per day (Vercel's way), ${since}`],
+    ["Unique devices", fmt(s.devices), `different devices ever, since ${fmtDay(DEVICE_IDS_FROM)}`],
     ["Today", fmt(t?.views ?? 0), `${fmt(t?.visitors ?? 0)} visitors`],
     ["Last 7 days", fmt(sumLast(s.days, 7, "views")), `${fmt(sumLast(s.days, 7, "visitors"))} visitors`],
     ["Last 30 days", fmt(sumLast(s.days, 30, "views")), `${fmt(sumLast(s.days, 30, "visitors"))} visitors`],
@@ -246,6 +253,7 @@ export default async function StatsPage() {
       <style>{CSS}</style>
       <h1>Site stats</h1>
       <p className="st-sub">All-time traffic for Internship Nest. Hover a bar for that day.</p>
+      <CountMeToggle />
       {s.error && <p className="st-err">Couldn&apos;t read some data: {s.error}</p>}
       <div className="st-tiles">
         {tiles.map(([l, v, n]) => (
@@ -306,6 +314,7 @@ const CSS = `
 .st-val { display:block; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .st-meter { height:4px; border-radius:2px; background:var(--bar); margin-top:4px; }
 .st-empty { color:var(--ink2); }
+.st-link { background:none; border:0; padding:0; font:inherit; color:var(--bar); cursor:pointer; text-decoration:underline; }
 .st-scroll { overflow-x:auto; }
 .st-scroll table { min-width:560px; }
 .st-scroll td .st-val { color:var(--ink); text-decoration:none; max-width:240px; }

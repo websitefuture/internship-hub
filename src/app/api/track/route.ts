@@ -4,8 +4,9 @@ import crypto from "crypto";
 // The site's own page-view counter (see sql/page_views.sql). Host-agnostic on purpose: it reads
 // whichever country header the current host sets, so it keeps working after a move off Vercel.
 //
-// No IP address is stored. The visitor id is a hash of a server secret, the IP, the browser and
-// today's date, so it counts distinct visitors within a day and cannot link anyone across days.
+// No IP address is stored. The visitor id is a hash of the browser's random anonymous device id
+// (or, without one, of the IP, browser and date) with a server secret, so it counts devices
+// without identifying anyone.
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!);
 const SALT = process.env.AUTH_SECRET ?? "";
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
     }
   }
 
-  let body: { path?: unknown; referrer?: unknown; utm?: unknown };
+  let body: { path?: unknown; referrer?: unknown; utm?: unknown; device?: unknown };
   try {
     const raw = await req.text();
     if (raw.length > 2000) return new Response(null, { status: 204 });
@@ -82,8 +83,16 @@ export async function POST(req: Request) {
     }
   }
 
+  // Preferred: the browser's own random device id (see ViewTracker), so one device stays one
+  // visitor when its network address changes. Hashed with the server secret so the stored value
+  // can't be matched back to the id in anyone's browser. Fallback for browsers without storage:
+  // the old per-day hash of address and browser, which can overcount a device that switches
+  // networks but stores no address either.
+  const deviceRaw = typeof body.device === "string" && /^[0-9a-f-]{36}$/i.test(body.device) ? body.device : null;
   const day = new Date().toISOString().slice(0, 10);
-  const visitor = crypto.createHash("sha256").update(`${SALT}|${clientIp(h)}|${ua}|${day}`).digest("hex").slice(0, 16);
+  const visitor = deviceRaw
+    ? "d" + crypto.createHash("sha256").update(`${SALT}|device|${deviceRaw}`).digest("hex").slice(0, 15)
+    : crypto.createHash("sha256").update(`${SALT}|${clientIp(h)}|${ua}|${day}`).digest("hex").slice(0, 16);
 
   const { error } = await supabase.from("page_views").insert({
     path,

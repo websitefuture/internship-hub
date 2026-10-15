@@ -46,5 +46,10 @@ create or replace view public.pv_sources with (security_invoker = true) as
 create or replace view public.pv_paths with (security_invoker = true) as
   select path, count(*)::int as views from public.page_views group by 1;
 
+-- Distinct devices ever, counted only from views carrying the browser's anonymous device id
+-- (visitor starts with 'd'). The per-day address hashes can't be counted across days.
+create or replace view public.pv_devices with (security_invoker = true) as
+  select count(distinct visitor)::int as devices from public.page_views where visitor like 'd%';
+
 create or replace view public.pv_countries with (security_invoker = true) as
   select coalesce(country, '(unknown)') as country, count(*)::int as views from public.page_views group by 1;

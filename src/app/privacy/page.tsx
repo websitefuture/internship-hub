@@ -70,8 +70,11 @@ export default function PrivacyPage() {
 
       <h3>Analytics</h3>
       <p>
-        We use Vercel Web Analytics to count page views and visits. It does not use cookies, does not build a profile
-        of you, and does not follow you to other websites.
+        We count page views with our own simple counter. For each view it records the page, the site that linked
+        you here, your country, and whether you are on a phone or a computer. To count how many different devices
+        visit, your browser keeps a random ID in its storage. It is not linked to your name, email or account, and
+        we never store your IP address. It does not use cookies, does not build a profile of you, and does not
+        follow you to other websites.
       </p>
 
       <h3>Instagram comments</h3>
@@ -93,6 +96,10 @@ export default function PrivacyPage() {
           <strong>Browser storage</strong> (<code>localStorage</code>), used to remember your profile and answers on
           your own device so the site does not ask you everything twice.
         </li>
+        <li>
+          <strong>A random device ID</strong> in the same storage, used only to count visits as described under
+          Analytics. Clearing your browser data removes it.
+        </li>
       </ul>
       <p>
         We do not use advertising or cross-site tracking cookies, which is why the site does not badger you with a
@@ -112,8 +119,8 @@ export default function PrivacyPage() {
           <strong>Supabase</strong>: the database that stores saved answers and shortlists for signed-in users.
         </li>
         <li>
-          <strong>Vercel</strong>: hosts the site and provides the cookieless analytics described above. Standard
-          server logs, including IP addresses, are processed as part of hosting.
+          <strong>Netlify</strong>: hosts the site. Standard server logs, including IP addresses, are processed as part
+          of hosting.
         </li>
         <li>
           <strong>Meta (Instagram)</strong>: delivers comments on our posts and carries our replies and direct
