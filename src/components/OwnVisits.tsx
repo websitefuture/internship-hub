@@ -1,12 +1,23 @@
 "use client";
 
 import { useEffect, useState, useSyncExternalStore } from "react";
-import { useRouter } from "next/navigation";
 import { DEVICE_KEY, DONT_COUNT_KEY } from "@/components/ViewTracker";
 
 // "Your own visits" on /admin/stats: lists every visitor in the chosen range so the owner can
 // take their own visits out of the graph and every number, one visitor at a time or everything
-// this browser ever sent at once. Deleting is permanent; the numbers reload right after.
+// this browser ever sent at once. Deleting is permanent; the page then reloads in full so the
+// graph and totals show the new numbers. (Next.js's in-place refresh, router.refresh(), came back
+// as a 503 from Netlify, which left the old graph on screen as though nothing had been removed.)
+const FLASH_KEY = "nest-stats-flash";
+
+function reloadWith(message: string) {
+  try {
+    sessionStorage.setItem(FLASH_KEY, message);
+  } catch {
+    // storage blocked; the reload still shows the new numbers
+  }
+  window.location.reload();
+}
 
 export type VisitorRow = {
   id: string;
@@ -54,15 +65,23 @@ async function call(body: object): Promise<{ ids?: string[]; removed?: number; e
 const SHOW = 25;
 
 export default function OwnVisits({ rows, rangeLabel }: { rows: VisitorRow[]; rangeLabel: string }) {
-  const router = useRouter();
   const ignored = useSyncExternalStore<boolean | null>(subscribe, readIgnored, () => null);
   const [mine, setMine] = useState<Set<string>>(new Set());
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [all, setAll] = useState(false);
 
-  // Ask the server which listed visitors are this browser, to tag them.
+  // Ask the server which listed visitors are this browser, to tag them, and show the result of a
+  // removal made just before the reload.
   useEffect(() => {
+    let flash: string | null = null;
+    try {
+      flash = sessionStorage.getItem(FLASH_KEY);
+      sessionStorage.removeItem(FLASH_KEY);
+    } catch {
+      // storage blocked; nothing to show
+    }
+    if (flash) void Promise.resolve(flash).then(setMessage);
     call({ action: "mine", device: readDevice() })
       .then((r) => setMine(new Set(r.ids ?? [])))
       .catch(() => {});
@@ -87,13 +106,8 @@ export default function OwnVisits({ rows, rangeLabel }: { rows: VisitorRow[]; ra
       setIgnored(true);
       const r = await call({ action: "remove-mine", device: readDevice() });
       const n = r.removed ?? 0;
-      setMessage(
-        n
-          ? `Removed ${views(n)} made from this browser. The graph and numbers above are updated.`
-          : "Nothing from this browser is left to remove. Any of your visits still in the list came from another device or network: press Remove on those.",
-      );
-      setMine(new Set());
-      router.refresh();
+      if (n) reloadWith(`Removed ${views(n)} made from this browser. The graph and numbers above are updated.`);
+      else setMessage("Nothing from this browser is left to remove. To take out any other visit, press Remove on its row below.");
     } catch (e) {
       setMessage(`Couldn't remove them: ${(e as Error).message}`);
     } finally {
@@ -106,8 +120,7 @@ export default function OwnVisits({ rows, rangeLabel }: { rows: VisitorRow[]; ra
     setMessage("");
     try {
       const r = await call({ action: "remove", visitor: row.id });
-      setMessage(`Removed ${views(r.removed ?? 0)} (${row.device}, ${row.country}). The graph and numbers above are updated.`);
-      router.refresh();
+      reloadWith(`Removed ${views(r.removed ?? 0)} (${row.device}, ${row.country}). The graph and numbers above are updated.`);
     } catch (e) {
       setMessage(`Couldn't remove it: ${(e as Error).message}`);
     } finally {
