@@ -74,7 +74,8 @@ export default function StatsChart({ pts, metric }: { pts: ChartPoint[]; metric:
           <path d={line} className="st-line" />
           {n <= 45 && pts.map((p, i) => <circle key={i} cx={x(i)} cy={y(p[metric])} r={2.5} className="st-dot" />)}
           {pts.map((p, i) =>
-            (i % every === 0 && n - 1 - i >= every / 2) || i === n - 1 ? (
+            // The last point always gets a label, so skip a regular one that would sit right next to it.
+            (i % every === 0 && n - 1 - i >= every) || i === n - 1 ? (
               <text key={`l${i}`} x={x(i)} y={H - 6} textAnchor={i === 0 ? "start" : i === n - 1 ? "end" : "middle"} className="st-axis">
                 {p.label}
               </text>
