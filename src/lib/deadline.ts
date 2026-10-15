@@ -17,6 +17,11 @@ export const SEARCH_BUDGET_MS = 50_000;
 export const SAFETY_MARGIN_MS = 2_000;
 // Below this a request has no realistic chance of an answer, so it is not sent at all.
 export const MIN_CALL_MS = 1_000;
+// The 60s limit is not the only one. Netlify's edge drops a response that sends nothing for
+// about 30s and serves its own "Inactivity Timeout" page instead. Measured live: an Austin
+// high-school search hit it at ~31s. So the search route streams one space this often while it
+// works, which keeps the connection alive well inside that limit.
+export const KEEPALIVE_MS = 5_000;
 
 export class Deadline {
   private readonly end: number;

@@ -5,7 +5,7 @@ import { searchAllSources } from "@/lib/sources";
 import { miles } from "@/lib/geo";
 import { fetchLocalBusinesses, radiusMilesForAnswers } from "@/lib/localBusinesses";
 import { getDriveTimes } from "@/lib/routing";
-import { Deadline, SEARCH_BUDGET_MS } from "@/lib/deadline";
+import { Deadline, KEEPALIVE_MS, SEARCH_BUDGET_MS } from "@/lib/deadline";
 import { scoreLive } from "@/lib/scoring";
 import type { Answers, DriveTime, LocationAnswer, RawListing, RoleKey } from "@/lib/types";
 
@@ -26,6 +26,50 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Missing location" }, { status: 400 });
   }
 
+  return streamWithKeepAlive(search(answers, loc, deadline));
+}
+
+// Sends the search result as JSON once it is ready, with a single space before it every
+// KEEPALIVE_MS while it runs. JSON allows leading whitespace, so the client's res.json() reads
+// the body unchanged. The status is committed as 200 when the first byte goes out, which is
+// fine because every outcome below already has a 200 shape the results screen handles. An
+// unexpected throw becomes the same "Search failed" shape, not a broken body.
+function streamWithKeepAlive(work: Promise<Response>): Response {
+  const encoder = new TextEncoder();
+  let timer: ReturnType<typeof setInterval> | undefined;
+  let done = false;
+
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const send = (text: string) => {
+        if (!done) controller.enqueue(encoder.encode(text));
+      };
+      send(" ");
+      timer = setInterval(() => send(" "), KEEPALIVE_MS);
+      work
+        .then((res) => res.text())
+        .catch(() => JSON.stringify({ results: [], coverage: true, error: "Search failed" }))
+        .then((json) => {
+          clearInterval(timer);
+          send(json);
+          if (!done) controller.close();
+          done = true;
+        });
+    },
+    // The browser went away. Stop the keepalive; the search finishes and its result is dropped.
+    cancel() {
+      done = true;
+      clearInterval(timer);
+    },
+  });
+
+  return new Response(stream, {
+    status: 200,
+    headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" },
+  });
+}
+
+async function search(answers: Answers, loc: LocationAnswer, deadline: Deadline): Promise<Response> {
   // Reverse-geocode server-side so we always search with a real place name
   // "your current location" (the label from the browser geolocation path) would
   // otherwise be sent straight to the jobs API as junk search text.

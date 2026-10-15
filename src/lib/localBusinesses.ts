@@ -323,12 +323,18 @@ export async function fetchLocalBusinesses(opts: {
   const roleLabel = roleNames.length ? roleNames.join("/") : "internship-style";
 
   async function runTier(radiusMiles: number): Promise<OverpassElement[]> {
-    // The tier's own measured timeout, cut only if the request's budget cannot cover it. The
-    // first query starts after at most one 8s geocode, so with a 50s budget it always gets its
-    // full 22s or 30s; only a late retry can come out shorter, and that is the point of it.
-    const budgetMs = budgetFor(tierTimeoutMs(radiusMiles), opts.deadline);
+    // Each server gets its own timeout, cut only if the request's budget cannot cover it at
+    // the moment that server is asked. The first query starts after at most one 8s geocode
+    // and a mirror attempt of at most 10s. With a 50s budget, the main instance still gets
+    // its full tier timeout, up to the longest at 30s (50 - 8 - 10 - 2s margin = 30s). Only a
+    // late retry can come out shorter, which is the point of the budget.
     const params = new URLSearchParams();
-    return queryOverpass(params, budgetMs, (ms) => buildQuery(opts.lat, opts.lng, radiusMiles, uniqueFilters, ms));
+    return queryOverpass(
+      params,
+      tierTimeoutMs(radiusMiles),
+      (ms) => buildQuery(opts.lat, opts.lng, radiusMiles, uniqueFilters, ms),
+      (ms) => budgetFor(ms, opts.deadline),
+    );
   }
 
   // One query, and at most one retry. Not two queries, and not a ladder of widening tiers.
