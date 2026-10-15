@@ -98,6 +98,7 @@ interface OverpassElement {
 
 interface OverpassResponse {
   elements: OverpassElement[];
+  remark?: string;
 }
 
 // Raw OSM tag values ("it", "marketing", "advertising_agency") aren't sentence-ready nouns
@@ -220,6 +221,83 @@ function buildQuery(lat: number, lng: number, radiusMiles: number, filters: stri
   return `[out:json][timeout:${budget}][bbox:${south},${west},${north},${east}];\n(\n${clauses}\n);\nout center 200;`;
 }
 
+// Which Overpass server to ask. One at a time, in order: a mirror first, then the main instance.
+//
+// overpass-api.de is the main public instance and the one every timing in this file was
+// measured against. It is also overloaded at times. On 2026-10-15 it took 33s for a trivial
+// query and 27.9s for this app's own Austin query, and production answered "Search failed".
+// overpass.private.coffee (formerly overpass.kumi.systems) answered the trivial query in 0.86s
+// that afternoon, then returned HTTP 500 to every query a few minutes later. Neither server can
+// be relied on alone. So the mirror gets a short timeout, and the main instance follows with
+// its full measured one.
+//
+// private.coffee's policy allows this use. The OSM wiki's "Overpass API" page lists it as:
+// "Feel free to use our service in any project, there is no rate limit in place." It asks for
+// a meaningful User-Agent, POST requests, and notice before large-scale use. This app sends at
+// most one query per high-school search, and caches results for an hour.
+//
+// The servers are tried in turn, never raced. Racing would double every search's load on
+// volunteer servers, only to save time while the mirror is down. The comments in
+// fetchLocalBusinesses record what two concurrent queries did to the main instance.
+const OVERPASS_MIRROR = "https://overpass.private.coffee/api/interpreter";
+const OVERPASS_MAIN = "https://overpass-api.de/api/interpreter";
+// A healthy mirror answers within a few seconds, and a broken one has failed in under a second
+// (HTTP 500). Ten seconds only costs anything when the mirror hangs.
+const MIRROR_TIMEOUT_MS = 10_000;
+// After a mirror failure, queries go straight to the main instance for a while. That way the
+// retry, and other searches on the same server instance, don't wait on a mirror that just
+// failed. The main instance is never skipped, because it is the last resort.
+const MIRROR_COOLDOWN_MS = 2 * 60 * 1000;
+let mirrorDownUntil = 0;
+
+async function postOverpass(endpoint: string, params: URLSearchParams, timeoutMs: number): Promise<OverpassElement[]> {
+  const res = await fetch(endpoint, {
+    method: "POST",
+    body: params,
+    // Overpass's Apache front-end 406s requests with no Accept/User-Agent header at all.
+    headers: { Accept: "*/*", "User-Agent": "internship-nest/1.0 (student cold-outreach finder)" },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  // Deliberately thrown rather than returning []. Overpass answers 429 when its public
+  // instance is out of slots and 504 when a query outruns the server's own timeout, and
+  // swallowing those made a busy service indistinguishable from an empty neighbourhood:
+  // the page told students "0 real businesses within 30 miles" when the truth was that
+  // nobody had looked yet. The caller decides what to do with a failure.
+  if (!res.ok) throw new Error(`Overpass ${res.status} from ${new URL(endpoint).host}`);
+  const body = (await res.json()) as OverpassResponse;
+  // A query that runs out of time on the server can still come back as HTTP 200, with the
+  // error in "remark" and the elements empty or cut short. Showing that would be the same false
+  // "nothing near you" as above, so it counts as a failure too.
+  if (body.remark && /error/i.test(body.remark)) throw new Error(`Overpass: ${body.remark}`);
+  return body.elements ?? [];
+}
+
+// Asks the mirror, then the main instance. `budgetMs` is the main instance's own timeout.
+// `cap` lets a caller with an overall time limit shorten either call, and it may throw to
+// mean no time is left. The query is rebuilt for each server, so the timeout written into it
+// matches that server's fetch timeout and the server gives up no later than we do.
+async function queryOverpass(
+  params: URLSearchParams,
+  budgetMs: number,
+  build: (timeoutMs: number) => string,
+  cap: (ms: number) => number = (ms) => ms,
+): Promise<OverpassElement[]> {
+  if (Date.now() >= mirrorDownUntil) {
+    const mirrorMs = cap(Math.min(MIRROR_TIMEOUT_MS, budgetMs));
+    try {
+      params.set("data", build(mirrorMs));
+      return await postOverpass(OVERPASS_MIRROR, params, mirrorMs);
+    } catch {
+      // 429, 5xx, 406, a timeout, a network error, a non-JSON error page or a server-side
+      // timeout all mean the same thing here: ask the main instance instead.
+      mirrorDownUntil = Date.now() + MIRROR_COOLDOWN_MS;
+    }
+  }
+  const mainMs = cap(budgetMs);
+  params.set("data", build(mainMs));
+  return postOverpass(OVERPASS_MAIN, params, mainMs);
+}
+
 export async function fetchLocalBusinesses(opts: {
   lat: number;
   lng: number;
@@ -238,22 +316,7 @@ export async function fetchLocalBusinesses(opts: {
 
   async function runTier(radiusMiles: number, budgetMs: number): Promise<OverpassElement[]> {
     const params = new URLSearchParams();
-    params.set("data", buildQuery(opts.lat, opts.lng, radiusMiles, uniqueFilters, budgetMs));
-    const res = await fetch("https://overpass-api.de/api/interpreter", {
-      method: "POST",
-      body: params,
-      // Overpass's Apache front-end 406s requests with no Accept/User-Agent header at all.
-      headers: { Accept: "*/*", "User-Agent": "internship-nest/1.0 (student cold-outreach finder)" },
-      signal: AbortSignal.timeout(budgetMs),
-    });
-    // Deliberately thrown rather than returning []. Overpass answers 429 when its public
-    // instance is out of slots and 504 when a query outruns the server's own timeout, and
-    // swallowing those made a busy service indistinguishable from an empty neighbourhood:
-    // the page told students "0 real businesses within 30 miles" when the truth was that
-    // nobody had looked yet. The caller decides what to do with a failure.
-    if (!res.ok) throw new Error(`Overpass ${res.status}`);
-    const body = (await res.json()) as OverpassResponse;
-    return body.elements ?? [];
+    return queryOverpass(params, budgetMs, (ms) => buildQuery(opts.lat, opts.lng, radiusMiles, uniqueFilters, ms));
   }
 
   // One query, and at most one retry. Not two queries, and not a ladder of widening tiers.
