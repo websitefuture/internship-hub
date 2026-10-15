@@ -63,18 +63,33 @@ async function insights(id: string): Promise<Record<string, number> | null> {
   }
 }
 
+// About 25 Graph API calls per load, so a successful result is kept for a few minutes: switching
+// ranges or removing a visit on the stats page then reloads in a fraction of a second.
+const KEEP_MS = 5 * 60 * 1000;
+let cached: { at: number; data: IgStats } | null = null;
+
 export async function loadInstagram(): Promise<IgStats | null> {
   if (!TOKEN) return null;
-  try {
-    const me = await get<{ username: string; followers_count?: number }>("me", { fields: "username,followers_count" });
-    const media = await get<{
-      data: { id: string; caption?: string; permalink: string; timestamp: string; media_product_type?: string; like_count?: number; comments_count?: number }[];
-    }>("me/media", {
-      fields: "id,caption,permalink,timestamp,media_product_type,like_count,comments_count",
-      limit: "12",
-    });
+  if (cached && Date.now() - cached.at < KEEP_MS) return cached.data;
+  const data = await fetchInstagram();
+  if (!data.error) cached = { at: Date.now(), data };
+  return data;
+}
 
-    const rows = await Promise.all(
+async function fetchInstagram(): Promise<IgStats> {
+  try {
+    const [me, media] = await Promise.all([
+      get<{ username: string; followers_count?: number }>("me", { fields: "username,followers_count" }),
+      get<{
+        data: { id: string; caption?: string; permalink: string; timestamp: string; media_product_type?: string; like_count?: number; comments_count?: number }[];
+      }>("me/media", {
+        fields: "id,caption,permalink,timestamp,media_product_type,like_count,comments_count",
+        limit: "12",
+      }),
+    ]);
+
+    // Insights and comments don't depend on each other, so both sets go out at once.
+    const rowsP = Promise.all(
       media.data.map(async (m) => {
         const ins = await insights(m.id);
         const post: IgPost = {
@@ -96,7 +111,7 @@ export async function loadInstagram(): Promise<IgStats | null> {
 
     // Latest comments across the most recent posts that have any.
     const withComments = media.data.filter((m) => (m.comments_count ?? 0) > 0).slice(0, 5);
-    const commentLists = await Promise.all(
+    const [rows, commentLists] = await Promise.all([rowsP, Promise.all(
       withComments.map(async (m) => {
         try {
           const c = await get<{ data: { username?: string; text?: string; timestamp: string }[] }>(`${m.id}/comments`, {
@@ -108,7 +123,7 @@ export async function loadInstagram(): Promise<IgStats | null> {
           return [];
         }
       }),
-    );
+    )]);
     const latestComments = commentLists
       .flat()
       .filter((c) => c.username !== me.username)

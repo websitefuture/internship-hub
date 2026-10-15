@@ -3,9 +3,9 @@ import { createClient } from "@supabase/supabase-js";
 import { auth } from "@/auth";
 import { ownVisitorIds, VISITOR_RE } from "@/lib/visitorId";
 
-// The owner's own-visit cleanup for /admin/stats. Only signed-in admins (ADMIN_EMAILS) may call it.
-//   { action: "mine", device }            -> which stored visitor values are this browser
-//   { action: "remove-mine", device }     -> delete every view this browser made
+// Visit cleanup for /admin/stats. Only signed-in admins (ADMIN_EMAILS) may call it.
+//   { action: "remove-mine", device }     -> delete every view this browser made (sent automatically
+//                                            whenever the owner opens the stats page)
 //   { action: "remove", visitor }         -> delete every view by one visitor picked from the list
 
 const ADMINS = (process.env.ADMIN_EMAILS ?? "")
@@ -30,14 +30,9 @@ export async function POST(req: Request) {
   const device = typeof body.device === "string" ? body.device : null;
   const db = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SECRET_KEY!);
 
-  if (body.action === "mine" || body.action === "remove-mine") {
+  if (body.action === "remove-mine") {
     const ids = ownVisitorIds(req.headers, device, FIRST_DAY);
-    if (!ids.length) return NextResponse.json({ ids: [], removed: 0 });
-    if (body.action === "mine") {
-      const { data, error } = await db.from("page_views").select("visitor").in("visitor", ids).limit(5000);
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-      return NextResponse.json({ ids: [...new Set((data ?? []).map((r) => r.visitor as string))] });
-    }
+    if (!ids.length) return NextResponse.json({ removed: 0 });
     const { count, error } = await db.from("page_views").delete({ count: "exact" }).in("visitor", ids);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     return NextResponse.json({ removed: count ?? 0 });

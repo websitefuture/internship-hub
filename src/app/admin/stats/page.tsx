@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { Suspense } from "react";
 import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { auth } from "@/auth";
-import { loadInstagram, type IgStats } from "@/lib/instagram";
+import { loadInstagram } from "@/lib/instagram";
 import OwnVisits, { type VisitorRow } from "@/components/OwnVisits";
 import StatsChart, { type ChartPoint } from "@/components/StatsChart";
 
@@ -245,7 +246,10 @@ const num = (n: number | null) => (n === null ? "–" : fmt(n));
 const shortDate = (iso: string) =>
   new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: TZ });
 
-function Instagram({ ig }: { ig: IgStats | null }) {
+// Loaded on its own and streamed in after the rest of the page, so the stats and graph never wait
+// on Instagram's API.
+async function Instagram() {
+  const ig = await loadInstagram();
   if (!ig) {
     return (
       <section className="st-card">
@@ -338,7 +342,7 @@ export default async function StatsPage(props: PageProps<"/admin/stats">) {
   const range: RangeKey = RANGES.some((r) => r.key === sp.range) ? (sp.range as RangeKey) : "30d";
   const metric: Metric = sp.metric === "views" ? "views" : "visitors";
 
-  const [data, ig] = await Promise.all([load(), loadInstagram()]);
+  const data = await load();
   const today = dayOf(new Date().toISOString());
   const firstDay = data.history[0]?.day ?? (data.views[0] ? dayOf(data.views[0].at) : today);
   const w = period(range, today, firstDay);
@@ -408,7 +412,16 @@ export default async function StatsPage(props: PageProps<"/admin/stats">) {
         <div><span className="st-label">NEST comments answered</span><span className="st-value st-small">{fmt(data.nest)}</span></div>
       </section>
 
-      <Instagram ig={ig} />
+      <Suspense
+        fallback={
+          <section className="st-card">
+            <h2>Instagram</h2>
+            <p className="st-note">Loading posts...</p>
+          </section>
+        }
+      >
+        <Instagram />
+      </Suspense>
     </main>
   );
 }
@@ -465,24 +478,18 @@ const CSS = `
 .st-tip .st-tip-date { color:var(--ink3); font-size:12px; margin-bottom:4px; }
 .st-tip .st-tip-on { color:var(--accent); }
 .st-msg { color:var(--ink2); margin-top:4px; }
-.st-own-head { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap; }
-.st-own-head p { margin:4px 0 0; max-width:560px; }
-.st-own-sub { font-size:13px; color:var(--ink2); margin:16px 0 4px; }
 .st-btn { font:inherit; font-size:13px; font-weight:600; padding:8px 12px; border-radius:6px; border:1px solid var(--accent); background:var(--accent); color:#fff; cursor:pointer; white-space:nowrap; }
 .st-btn:disabled { opacity:.6; cursor:default; }
 .st-btn-quiet { background:transparent; color:var(--accent); padding:5px 10px; font-weight:500; }
 .st-btn-quiet:hover:not(:disabled) { background:var(--accent-soft); }
 .st-visitors { list-style:none; margin:0; padding:0; }
 .st-visitors li { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:8px 0; border-top:1px solid var(--grid); }
-.st-visitors li.st-me { background:var(--accent-soft); margin:0 -8px; padding:8px; border-radius:6px; }
 .st-vinfo { min-width:0; }
 .st-vline { font-size:14px; }
 .st-vinfo .st-note { overflow-wrap:anywhere; }
-.st-tag { display:inline-block; margin-left:8px; font-size:11px; font-weight:600; color:var(--accent); border:1px solid var(--accent); border-radius:4px; padding:0 5px; }
 .st-site { display:inline-block; margin-left:8px; font-size:11px; color:var(--ink3); border:1px solid var(--line); border-radius:4px; padding:0 5px; }
+.st-own-intro { margin:4px 0 10px; }
 .st-more { font-size:13px; margin-top:8px; }
-.st-own-foot { margin:14px 0 0; }
-@media (max-width: 600px) { .st-own-head .st-btn { width:100%; } }
 .st-note { color:var(--ink3); font-size:12px; }
 .st-grid2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
 .st-grid2 .st-card { margin-bottom:0; }
