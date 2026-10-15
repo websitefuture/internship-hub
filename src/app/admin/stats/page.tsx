@@ -3,6 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@supabase/supabase-js";
 import { auth } from "@/auth";
+import { loadInstagram, type IgStats } from "@/lib/instagram";
 
 // Private all-time traffic dashboard. Reads the site's own tracker (sql/page_views.sql) and the
 // Vercel history imported before the move, so the record is continuous across hosts.
@@ -16,6 +17,9 @@ const ADMINS = (process.env.ADMIN_EMAILS ?? "")
   .filter(Boolean);
 
 type Day = { day: string; views: number; visitors: number; from: "tracker" | "vercel" };
+
+// The day the site's own tracker went live; everything earlier is imported Vercel history.
+const FIRST_TRACKED_DAY = "2026-10-15";
 type Row = { label: string; views: number };
 
 async function load() {
@@ -80,11 +84,15 @@ function Chart({ days, W, span, className }: { days: Day[]; W: number; span: num
       ))}
       {shown.map((d, i) => {
         const x = padL + i * bw, w = Math.max(1, bw - gap), h = (d.views / top) * ih;
+        // Visitors can never exceed page views, so the visitors bar sits inside the views bar:
+        // the light part above it is repeat loads by the same devices.
+        const hv = (Math.min(d.visitors, d.views) / top) * ih;
         return (
           <g key={d.day}>
-            <title>{`${fmtDay(d.day)}: ${fmt(d.views)} views, ${fmt(d.visitors)} visitors${d.from === "vercel" ? " (Vercel history)" : ""}`}</title>
+            <title>{`${fmtDay(d.day)}: ${fmt(d.views)} page views, ${fmt(d.visitors)} visitors${d.from === "vercel" ? " (Vercel history)" : ""}`}</title>
             <rect x={x} y={padT} width={bw} height={ih} fill="transparent" />
-            {d.views > 0 && <rect x={x} y={y(d.views)} width={w} height={h} rx={Math.min(3, w / 2)} className={d.from === "vercel" ? "st-bar st-old" : "st-bar"} />}
+            {d.views > 0 && <rect x={x} y={y(d.views)} width={w} height={h} rx={Math.min(3, w / 2)} className="st-bar st-views" />}
+            {d.visitors > 0 && <rect x={x} y={y(Math.min(d.visitors, d.views))} width={w} height={hv} rx={Math.min(3, w / 2)} className="st-bar" />}
             {i % every === 0 && (
               <text x={x + bw / 2} y={H - 6} textAnchor="middle" className="st-axis">
                 {new Date(d.day + "T00:00:00Z").toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
@@ -122,6 +130,84 @@ function Table({ title, rows, label }: { title: string; rows: Row[]; label: stri
   );
 }
 
+const num = (n: number | null) => (n === null ? "–" : fmt(n));
+const shortDate = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+
+function Instagram({ ig }: { ig: IgStats | null }) {
+  if (!ig) {
+    return (
+      <section className="st-card">
+        <h2>Instagram</h2>
+        <p className="st-empty">Not connected yet. Add the Instagram access token to the site&apos;s settings to see posts here.</p>
+      </section>
+    );
+  }
+  if (ig.error) {
+    return (
+      <section className="st-card">
+        <h2>Instagram</h2>
+        <p className="st-err">Couldn&apos;t read Instagram: {ig.error}</p>
+      </section>
+    );
+  }
+  return (
+    <section className="st-card">
+      <h2>Instagram: @{ig.username}</h2>
+      <p className="st-note">{fmt(ig.followers)} followers. Latest {ig.posts.length} posts.</p>
+      {ig.insightsMissing && (
+        <p className="st-note">Views, reach, saves and shares need the insights permission on the Instagram token.</p>
+      )}
+      <div className="st-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th>Post</th>
+              <th className="st-num">Views</th>
+              <th className="st-num">Reach</th>
+              <th className="st-num">Likes</th>
+              <th className="st-num">Comments</th>
+              <th className="st-num">Saves</th>
+              <th className="st-num">Shares</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ig.posts.map((p) => (
+              <tr key={p.id}>
+                <td>
+                  <a className="st-val" href={p.permalink} target="_blank" rel="noreferrer" title={p.caption}>
+                    {p.caption || "(no caption)"}
+                  </a>
+                  <span className="st-note">{shortDate(p.timestamp)}{p.type === "REELS" ? ", reel" : ""}</span>
+                </td>
+                <td className="st-num">{num(p.views)}</td>
+                <td className="st-num">{num(p.reach)}</td>
+                <td className="st-num">{fmt(p.likes)}</td>
+                <td className="st-num">{fmt(p.comments)}</td>
+                <td className="st-num">{num(p.saves)}</td>
+                <td className="st-num">{num(p.shares)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <h2 className="st-h2b">Latest comments</h2>
+      {ig.latestComments.length === 0 ? (
+        <p className="st-empty">No comments yet.</p>
+      ) : (
+        <ul className="st-comments">
+          {ig.latestComments.map((c, i) => (
+            <li key={i}>
+              <strong>@{c.username}</strong> {c.text}{" "}
+              <a className="st-note" href={c.permalink} target="_blank" rel="noreferrer">{shortDate(c.timestamp)}</a>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
+}
+
 export default async function StatsPage() {
   const session = await auth();
   const email = session?.user?.email?.toLowerCase();
@@ -136,14 +222,22 @@ export default async function StatsPage() {
   }
   if (!ADMINS.includes(email)) notFound();
 
-  const s = await load();
+  const [s, ig] = await Promise.all([load(), loadInstagram()]);
   const total = s.days.reduce((a, d) => a + d.views, 0);
   const best = s.days.reduce<Day | null>((a, d) => (!a || d.views > a.views ? d : a), null);
+  const totalVisitors = s.days.reduce((a, d) => a + d.visitors, 0);
+  const today = new Date().toISOString().slice(0, 10);
+  const t = s.days.find((d) => d.day === today);
+  const since = s.days.length ? `since ${fmtDay(s.days[0].day)}` : "no data yet";
+  // Same two numbers Vercel showed: page views (every load, reloads included) and visitors
+  // (different devices, each counted once per day; Vercel counts them the same way).
   const tiles: [string, string, string][] = [
-    ["All-time page views", fmt(total), s.days.length ? `since ${fmtDay(s.days[0].day)}` : "no data yet"],
-    ["Last 7 days", fmt(sumLast(s.days, 7, "views")), `${fmt(sumLast(s.days, 7, "visitors"))} daily visitors`],
-    ["Last 30 days", fmt(sumLast(s.days, 30, "views")), `${fmt(sumLast(s.days, 30, "visitors"))} daily visitors`],
-    ["Best day", best ? fmt(best.views) : "0", best ? fmtDay(best.day) : "none yet"],
+    ["Page views", fmt(total), `every page load, reloads included, ${since}`],
+    ["Visitors", fmt(totalVisitors), `different devices, counted once per day, ${since}`],
+    ["Today", fmt(t?.views ?? 0), `${fmt(t?.visitors ?? 0)} visitors`],
+    ["Last 7 days", fmt(sumLast(s.days, 7, "views")), `${fmt(sumLast(s.days, 7, "visitors"))} visitors`],
+    ["Last 30 days", fmt(sumLast(s.days, 30, "views")), `${fmt(sumLast(s.days, 30, "visitors"))} visitors`],
+    ["Best day", best ? fmt(best.views) : "0", best ? `${fmtDay(best.day)}, ${fmt(best.visitors)} visitors` : "none yet"],
     ["NEST comments answered", fmt(s.nest), "Instagram auto-reply"],
   ];
 
@@ -159,16 +253,21 @@ export default async function StatsPage() {
         ))}
       </div>
       <section className="st-card">
-        <h2>Page views per day</h2>
+        <h2>Page views and visitors per day</h2>
+        <div className="st-legend">
+          <span><i className="st-sw st-sw-views" />Page views</span>
+          <span><i className="st-sw" />Visitors</span>
+        </div>
         <Chart days={s.days} W={900} span={90} className="st-desk" />
         <Chart days={s.days} W={380} span={30} className="st-mob" />
-        <p className="st-note">Lighter bars are history imported from Vercel; solid bars are counted by the site itself.</p>
+        <p className="st-note">Days before {fmtDay(FIRST_TRACKED_DAY)} come from Vercel&apos;s analytics; after that the site counts them itself. Hover a bar for exact numbers.</p>
       </section>
       <div className="st-grid3">
         <Table title="Where visitors came from" rows={s.sources} label="Source" />
         <Table title="Top pages" rows={s.paths} label="Page" />
         <Table title="Countries" rows={s.countries} label="Country" />
       </div>
+      <Instagram ig={ig} />
       <p className="st-note">Visitors are counted per day, so someone who comes back on three days counts three times. No cookies are used and no IP addresses are stored.</p>
     </main>
   );
@@ -194,7 +293,11 @@ const CSS = `
 @media (max-width: 600px) { .st-desk { display:none; } .st-mob { display:block; } }
 .st-grid { stroke:var(--grid); } .st-base { stroke:var(--line); }
 .st-axis { font-size:11px; fill:var(--ink3); }
-.st-bar { fill:var(--bar); } .st-old { fill:var(--bar-old); }
+.st-bar { fill:var(--bar); } .st-views { fill:var(--bar-old); }
+.st-legend { display:flex; gap:16px; font-size:13px; color:var(--ink2); margin:-4px 0 8px; }
+.st-legend span { display:inline-flex; align-items:center; gap:6px; }
+.st-sw { display:inline-block; width:10px; height:10px; border-radius:2px; background:var(--bar); }
+.st-sw-views { background:var(--bar-old); }
 .st-grid3 { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:20px; }
 .st-wrap table { width:100%; border-collapse:collapse; font-size:14px; }
 .st-wrap th { text-align:left; color:var(--ink3); font-size:12px; font-weight:600; padding-bottom:6px; }
@@ -203,4 +306,12 @@ const CSS = `
 .st-val { display:block; max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .st-meter { height:4px; border-radius:2px; background:var(--bar); margin-top:4px; }
 .st-empty { color:var(--ink2); }
+.st-scroll { overflow-x:auto; }
+.st-scroll table { min-width:560px; }
+.st-scroll td .st-val { color:var(--ink); text-decoration:none; max-width:240px; }
+.st-scroll td .st-note { display:block; }
+.st-h2b { margin-top:18px !important; }
+.st-comments { list-style:none; padding:0; margin:0; font-size:14px; }
+.st-comments li { padding:6px 0; border-top:1px solid var(--grid); overflow-wrap:anywhere; }
+.st-comments a { text-decoration:none; }
 `;
