@@ -6,9 +6,9 @@ import { signIn, signOut, useSession } from "next-auth/react";
 import Dial, { type DialPoint } from "@/components/Dial";
 import { bearing } from "@/lib/geo";
 import { QUESTIONS } from "@/lib/questions";
-import { radiusMilesForAnswers } from "@/lib/localBusinesses";
+import { radiusMilesForAnswers, searchOsmFromBrowser, type OverpassElement } from "@/lib/overpass";
 import { load, save } from "@/lib/storage";
-import type { Answers, GeoResult, LocationAnswer, Question, ScoredListing, UserProfile } from "@/lib/types";
+import type { Answers, GeoResult, LocationAnswer, Question, RoleKey, ScoredListing, UserProfile } from "@/lib/types";
 
 type View = "landing" | "auth" | "q" | "res";
 
@@ -28,7 +28,7 @@ const WEAK: Record<string, (d: number | null) => string> = {
 function why(c: ScoredListing): string {
   const s = STRONG[c.best[0]](c.d);
   const w = WEAK[c.worst[0]](c.d);
-  return c.best[1] - c.worst[1] < 0.25 ? `Solid on everything: ${s}.` : `Ranks here because ${s}, despite ${w}.`;
+  return c.best[1] - c.worst[1] < 0.25 ? `Solid on everything: ${s}.` : `Ranks here because ${s}, though ${w}.`;
 }
 
 function band(d: number | null, lim: number): "near" | "mid" | "far" | null {
@@ -62,6 +62,8 @@ function initial(name: string): string {
   const m = name.trim().match(/[A-Za-z0-9]/);
   return m ? m[0].toUpperCase() : "?";
 }
+
+const GUEST: UserProfile = { name: "Guest", email: "" };
 
 function payLabel(c: ScoredListing): string {
   if (c.salaryMin || c.salaryMax) {
@@ -121,17 +123,46 @@ function isAnswerEmpty(q: Question, answers: Answers): boolean {
   return !v;
 }
 
+// What the cold email is allowed to say about a business: only facts the search returned, each
+// with its source. Nothing here is guessed, summarised or embellished, because a cold email that
+// opens with a made-up detail about someone's business is the worst first impression there is,
+// and the student has no way to catch it. Anything the email needs beyond these is a bracketed
+// blank the student fills in from something they checked themselves.
+function verifiedFacts(c: ScoredListing): { said: string; source: string }[] {
+  const src = c.source || "OpenStreetMap";
+  const facts = [{ said: `its name, ${c.company}`, source: src }];
+  if (c.addressIsStreet) facts.push({ said: `its address, ${c.locationLabel}`, source: src });
+  return facts;
+}
+
+// What gets saved (in this browser, or to a signed-in account) is a coarsened copy of the
+// answers: the location rounded to three decimals, about 100 metres. The search itself uses the
+// exact point for the visit it runs, but a saved copy has no reason to pinpoint a student's home,
+// and most students using this are minors. A tenth of a mile changes no ranking.
+function forStorage(a: Answers): Answers {
+  if (!a.loc) return a;
+  const r = (v: number) => Math.round(v * 1000) / 1000;
+  return { ...a, loc: { ...a.loc, lat: r(a.loc.lat), lng: r(a.loc.lng) } };
+}
+
 function draftEmail(c: ScoredListing): { subject: string; body: string } {
   if (c.coldOutreach) {
+    // Each clause appears only when the matching fact came back from the search. The OSM
+    // category is left out on purpose: it is whatever a mapper tagged, and in Campbell it called
+    // a fine-arts gallery and a flooring shop "architecture firms". A wrong guess about what a
+    // business does is the worst line a student could send it.
+    const where = c.addressIsStreet ? ` at ${c.locationLabel}` : "";
     return {
       subject: `Local student interested in ${c.company}`,
       body: `Hi ${c.company} team,
 
-My name is [Your Name], a [grade] student at [Your School]. I came across ${c.company} while looking for ${c.category.toLowerCase()} opportunities near ${c.locationLabel}, and I'd love the chance to intern, shadow, or help out, even informally, part-time, or unpaid to start.
+My name is [Your Name], a [grade] student at [Your School]. I came across ${c.company}${where}, and I'd love the chance to learn from your team, whether that's an internship, shadowing, or helping out with whatever would be useful.
 
-[A sentence or two on why this business specifically interests you, and any relevant skills or coursework. Personalize this before sending.]
+[Why ${c.company} specifically: something you have checked yourself, like their website, a visit, or someone who works there. If you don't have anything yet, leave this out rather than guess.]
 
-Would you be open to a short conversation about whether there's any way I could help out? I'm available [your availability] and can come by in person if that's easier.
+[Any relevant skills, classes, or projects.]
+
+Would you be open to a short conversation about whether there's a way I could help? I'm available [your availability] and can come by in person if that's easier.
 
 Thank you for your time,
 [Your Name]
@@ -154,8 +185,23 @@ Thank you for your time,
   };
 }
 
-function ContactModal({ listing, onClose }: { listing: ScoredListing; onClose: () => void }) {
+function ContactModal({ listing, onClose, inCalifornia }: { listing: ScoredListing; onClose: () => void; inCalifornia: boolean }) {
   const [copied, setCopied] = useState(false);
+  const closeRef = useRef<HTMLButtonElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+  // A dialog takes focus when it opens and closes on Escape, like any other on the web. Run once
+  // per opening, so a re-render behind it never pulls focus back to the close button.
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCloseRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   const { subject, body } = draftEmail(listing);
   const fullText = `Subject: ${subject}\n\n${body}`;
   const mailHref = listing.contactEmail
@@ -174,14 +220,18 @@ function ContactModal({ listing, onClose }: { listing: ScoredListing; onClose: (
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <button className="modal-close" onClick={onClose} aria-label="Close">
+      <div className="modal" role="dialog" aria-modal="true" aria-labelledby="contact-title" onClick={(e) => e.stopPropagation()}>
+        <button ref={closeRef} className="modal-close" onClick={onClose} aria-label="Close">
           ×
         </button>
-        <h2 style={{ marginBottom: 4 }}>{listing.title}</h2>
+        {/* A business to pitch has no role title, only OpenStreetMap's category for it, so the
+            business itself is the heading. */}
+        <h2 id="contact-title" style={{ marginBottom: 4 }}>
+          {listing.coldOutreach ? listing.company : listing.title}
+        </h2>
         <p className="note" style={{ marginBottom: 16 }}>
-          {listing.company} · {listing.locationLabel}
-          {listing.category ? ` · ${listing.category}` : ""}
+          {listing.coldOutreach ? listing.category : listing.company} · {listing.locationLabel}
+          {!listing.coldOutreach && listing.category ? ` · ${listing.category}` : ""}
         </p>
         <p className="desc">{listing.description}</p>
         <p className="desc" style={{ color: "var(--ink-3)" }}>
@@ -235,10 +285,20 @@ function ContactModal({ listing, onClose }: { listing: ScoredListing; onClose: (
           )}
         </div>
 
+        {listing.coldOutreach && inCalifornia && (
+          <p className="note" style={{ marginTop: 12 }}>
+            Under 18 in California? You&apos;ll need a work permit before you start, and you get it through your school.
+          </p>
+        )}
+
         <div className="contact-block">
           <h3>Sample email</h3>
           <p className="note" style={{ marginBottom: 8 }}>
-            A starting point. Personalize it before sending.
+            {listing.coldOutreach
+              ? `Everything this email says about ${listing.company} came from ${listing.source || "OpenStreetMap"}: ${verifiedFacts(listing)
+                  .map((f) => f.said)
+                  .join("; ")}. Fill in the bracketed parts yourself before sending.`
+              : "A starting point. Fill in the bracketed parts before sending."}
           </p>
           <pre className="email-draft">{fullText}</pre>
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
@@ -280,9 +340,9 @@ function ResultRow({
         {initial(c.company)}
       </div>
       <div>
-        <h3>{c.title}</h3>
+        <h3>{c.coldOutreach ? c.company : c.title}</h3>
         <div className="meta">
-          <Pill d={c.d} lim={lim} /> &nbsp;{c.company} · {c.locationLabel}
+          <Pill d={c.d} lim={lim} /> &nbsp;{c.coldOutreach ? c.category : c.company} · {c.locationLabel}
           {c.coldOutreach && (
             <>
               {" "}
@@ -354,8 +414,6 @@ export default function HomeClient() {
   const runSearchRef = useRef<((a: Answers, u: UserProfile) => Promise<void>) | null>(null);
   const [hsCity, setHsCity] = useState("");
   const [contactFor, setContactFor] = useState<ScoredListing | null>(null);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [locMsg, setLocMsg] = useState<{ text: string; err?: boolean } | null>(null);
   const [authMsg, setAuthMsg] = useState<string | null>(null);
   const [geoBusy, setGeoBusy] = useState(false);
@@ -450,7 +508,7 @@ export default function HomeClient() {
       fetch("/api/user-data", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers }),
+        body: JSON.stringify({ answers: forStorage(answers) }),
       }).catch(() => {});
     }, 900);
     return () => clearTimeout(t);
@@ -526,8 +584,13 @@ export default function HomeClient() {
         .catch(() => {});
     } else {
       Promise.resolve().then(() => {
-        const p = load<UserProfile>("profile");
+        const saved = load<UserProfile>("profile");
         const a = load<Answers>("answers");
+        // Older versions asked guests for a name and an email and kept them here, unused. They
+        // are dropped on the next visit, and saved locations coarsened the same way as new ones.
+        const p = saved ? GUEST : null;
+        if (saved && (saved.name !== GUEST.name || saved.email)) save("profile", GUEST);
+        if (a?.loc && forStorage(a).loc!.lat !== a.loc.lat) save("answers", forStorage(a));
         if (p) setUser(a?.loc ? { ...p, lat: a.loc.lat, lng: a.loc.lng } : p);
         if (a) setAnswers(a);
         const r = load<ScoredListing[]>("results");
@@ -572,25 +635,12 @@ export default function HomeClient() {
     go("landing");
   }
 
+  // Guests are asked for nothing. The name and email this used to collect were never used for
+  // anything but the initial in the corner, and most of the people using this are minors.
   function createProfile() {
-    const n = name.trim();
-    // A single letter or a name with no actual letters in it ("a", "123") isn't a name
-    // this is still just a local guest profile, not a real account, so the bar stays low,
-    // but it should at least look like someone typed a name.
-    const letterCount = (n.match(/[a-zA-Z]/g) || []).length;
-    if (letterCount < 2) {
-      setAuthMsg("Enter your actual name (at least a couple letters).");
-      return;
-    }
-    const em = email.trim();
-    if (em && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
-      setAuthMsg("That email doesn't look right. Fix it or leave it blank.");
-      return;
-    }
     setAuthMsg(null);
-    const u: UserProfile = { name: n, email: em };
-    setUser(u);
-    save("profile", u);
+    setUser(GUEST);
+    save("profile", GUEST);
     go("q", 0);
   }
 
@@ -662,22 +712,6 @@ export default function HomeClient() {
     setCityResults([]);
   }
 
-  async function goNext() {
-    const q = currentQ;
-    if (isAnswerEmpty(q, answers)) {
-      setQHint(q.type === "loc" ? "Choose a location to continue." : "Pick at least one.");
-      return;
-    }
-    setQHint("");
-    if (qIndex < QUESTIONS.length - 1) {
-      go("q", qIndex + 1);
-      return;
-    }
-
-    const loc = answers.loc!;
-    await runSearch(answers, { ...user!, lat: loc.lat, lng: loc.lng });
-  }
-
   // The search, separated from the question flow that used to contain it. A returning account
   // with a full set of answers and no saved shortlist needs to run exactly this, and making
   // them press Next through nine questions they had already answered to get there was the
@@ -713,10 +747,22 @@ export default function HomeClient() {
     }, 3500);
 
     try {
+      // High school: the slow OpenStreetMap query runs here in the browser, which has no time
+      // limit, and the server only scores the records (see lib/overpass.ts for why). If it
+      // fails, the server still tries on its own.
+      let osm: OverpassElement[] | undefined;
+      if (a.stage === "hs") {
+        try {
+          const roles = (a.role || []).filter((r): r is RoleKey => r !== "other");
+          osm = await searchOsmFromBrowser(loc.lat, loc.lng, radiusMilesForAnswers(a.max), roles);
+        } catch {
+          osm = undefined;
+        }
+      }
       const res = await fetch("/api/search-live", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ answers: a, loc }),
+        body: JSON.stringify({ answers: a, loc, osm }),
       });
       const data = await res.json();
       const computed: ScoredListing[] = data.results || [];
@@ -734,11 +780,11 @@ export default function HomeClient() {
         fetch("/api/user-data", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ answers: a, results: computed }),
+          body: JSON.stringify({ answers: forStorage(a), results: computed }),
         }).catch(() => {});
       } else {
         save("profile", finalUser);
-        save("answers", a);
+        save("answers", forStorage(a));
         save("results", computed);
       }
     } catch {
@@ -748,6 +794,22 @@ export default function HomeClient() {
       setComputing(false);
       setProgressMsg("");
     }
+  }
+
+  async function goNext() {
+    const q = currentQ;
+    if (isAnswerEmpty(q, answers)) {
+      setQHint(q.type === "loc" ? "Choose a location to continue." : "Pick at least one.");
+      return;
+    }
+    setQHint("");
+    if (qIndex < QUESTIONS.length - 1) {
+      go("q", qIndex + 1);
+      return;
+    }
+
+    const loc = answers.loc!;
+    await runSearch(answers, { ...user!, lat: loc.lat, lng: loc.lng });
   }
 
   function goBack() {
@@ -769,7 +831,7 @@ export default function HomeClient() {
     if (!results || !user?.lat) return [];
     const lim = effectiveLim;
     const withB: DialPoint[] = results.map((c) => ({
-      label: c.title,
+      label: c.coldOutreach ? c.company : c.title,
       d: c.d,
       b: c.lat === null || c.lng === null ? 0 : bearing(user.lat!, user.lng!, c.lat, c.lng),
       lim,
@@ -992,40 +1054,13 @@ export default function HomeClient() {
 
                 <div className="divider">or</div>
 
-                <div className="field">
-                  <label htmlFor="nm">Your name</label>
-                  <input
-                    id="nm"
-                    type="text"
-                    placeholder="Your name"
-                    autoComplete="name"
-                    value={name}
-                    onChange={(e) => {
-                      setName(e.target.value);
-                      if (authMsg) setAuthMsg(null);
-                    }}
-                  />
-                </div>
-                <div className="field">
-                  <label htmlFor="em">Email</label>
-                  <input
-                    id="em"
-                    type="email"
-                    placeholder="you@example.com"
-                    autoComplete="email"
-                    value={email}
-                    onChange={(e) => {
-                      setEmail(e.target.value);
-                      if (authMsg) setAuthMsg(null);
-                    }}
-                  />
-                </div>
                 {authMsg && <div className="locstate err">{authMsg}</div>}
                 <button className="btn" style={{ width: "100%" }} onClick={createProfile}>
                   Continue without an account
                 </button>
                 <p className="note" style={{ marginTop: 14 }}>
-                  Saved in this browser only, not tied to an account, and won&apos;t follow you to another device.
+                  No name or email needed. Your answers are saved in this browser only, not tied to an account, and
+                  won&apos;t follow you to another device.
                 </p>
                 <p className="note consent-note">
                   By continuing, either way, you agree to our <Link href="/terms">Terms</Link> and{" "}
@@ -1054,7 +1089,7 @@ export default function HomeClient() {
                     <svg className="checkdot" width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                       <path d="M3 8.6l3.1 3L13 4.8" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                    High schoolers get real nearby businesses to cold-pitch, with a ready-to-send email, not fake
+                    High schoolers get real nearby businesses to cold-pitch, with an email drafted from what we found, not fake
                     listings that require a college degree.
                   </li>
                   <li>
@@ -1317,7 +1352,13 @@ export default function HomeClient() {
         </footer>
       )}
 
-      {contactFor && <ContactModal listing={contactFor} onClose={() => setContactFor(null)} />}
+      {contactFor && (
+        <ContactModal
+          listing={contactFor}
+          onClose={() => setContactFor(null)}
+          inCalifornia={/\bCalifornia\b|,\s*CA\b/.test(`${hsCity} ${answers.loc?.label ?? ""} ${contactFor.locationLabel}`)}
+        />
+      )}
     </>
   );
 }

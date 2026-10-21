@@ -37,9 +37,11 @@ export async function POST(req: Request) {
   // Only overwrite what this request actually carries. Answers are now saved as they are
   // given, mid-questionnaire, and a full-row upsert would null the saved shortlist every
   // time one of those went through.
+  // The account's name is not stored: nothing ever read it back, and most students using this
+  // are minors, so the row keeps only the email that identifies it.
   const row: Record<string, unknown> = {
     user_email: email,
-    name: session.user?.name ?? "",
+    name: "",
     updated_at: new Date().toISOString(),
   };
   if ("answers" in body) row.answers = body.answers ?? null;

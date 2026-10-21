@@ -9,7 +9,7 @@ export const CONTACT_EMAIL = "internshipnest@gmail.com";
 export const SITE_NAME = "Internship Nest";
 
 // Last substantive revision of the policies, shown so users can tell when terms moved.
-export const POLICY_UPDATED = "22 September 2026";
+export const POLICY_UPDATED = "20 October 2026";
 
 // The countries where the live jobs API actually returns listings, mirroring
 // ADZUNA_COUNTRIES in src/lib/jobs.ts. The landing copy used to claim "worldwide", which

@@ -37,16 +37,17 @@ export default function PrivacyPage() {
 
       <h3>Without an account</h3>
       <p>
-        You give a name, and optionally an email address. These are stored only in your own browser (in{" "}
-        <code>localStorage</code>) and are not sent to our database. Your questionnaire answers are stored the same
-        way. Clearing your browser data removes them.
+        We ask for nothing: no name, no email. Your questionnaire answers and shortlist are stored only in your own
+        browser (in <code>localStorage</code>) and are not sent to our database. Clearing your browser data removes
+        them.
       </p>
 
       <h3>Signed in with Google</h3>
       <p>
-        Signing in tells us your Google account name and email address. We do not receive your Google password, and
-        we do not have access to your Gmail, contacts, or files. Your questionnaire answers and your generated
-        shortlist are saved to our database, keyed to your email address, so they can be restored when you return.
+        Signing in tells us your Google account name and email address. We store only the email address, to find
+        your saved answers again; the name is not stored. We do not receive your Google password, and we do not have
+        access to your Gmail, contacts, or files. Your questionnaire answers and your generated shortlist are saved to
+        our database, keyed to your email address, so they can be restored when you return.
       </p>
 
       <h3>Location</h3>
@@ -64,8 +65,9 @@ export default function PrivacyPage() {
         </li>
       </ul>
       <p>
-        Your location is used to run the search and to calculate distances and drive times. If you are signed in, it
-        is saved with your answers.
+        Your location is used to run the search and to calculate distances and drive times. Whenever it is saved
+        (in your browser, or with your answers if you are signed in), it is first rounded to about 100 metres, so a
+        saved copy never pinpoints your home.
       </p>
 
       <h3>Analytics</h3>
@@ -94,7 +96,7 @@ export default function PrivacyPage() {
           strictly necessary for that feature. Signing out clears it.
         </li>
         <li>
-          <strong>Browser storage</strong> (<code>localStorage</code>), used to remember your profile and answers on
+          <strong>Browser storage</strong> (<code>localStorage</code>), used to remember your answers and shortlist on
           your own device so the site does not ask you everything twice.
         </li>
         <li>
@@ -133,7 +135,9 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>OpenStreetMap (Nominatim and Overpass)</strong>: turns your city search into coordinates, and finds
-          nearby businesses. It receives the place text or coordinates being searched.
+          nearby businesses. It receives the place text or coordinates being searched. For the high-school search,
+          your own browser asks Overpass (or, when Overpass is down, Nominatim) directly for businesses in a box
+          around your location, so that service also sees your IP address, as any website you visit does.
         </li>
         <li>
           <strong>OSRM</strong>: calculates driving distances. It receives the start and end coordinates of a route.

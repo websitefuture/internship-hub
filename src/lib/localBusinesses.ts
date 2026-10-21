@@ -1,6 +1,7 @@
 import { miles } from "./geo";
 import type { RawListing, RoleKey } from "./types";
-import { budgetFor, SAFETY_MARGIN_MS, type Deadline } from "./deadline";
+import { budgetFor, BudgetSpentError, MIN_CALL_MS, SAFETY_MARGIN_MS, type Deadline } from "./deadline";
+import { buildQuery, filtersForRoles, OVERPASS_MAIN, OVERPASS_MIRROR, postOverpass, searchNominatim, type OverpassElement, type OverpassTags } from "./overpass";
 
 // High-schooler internships essentially don't exist as formal job postings (confirmed by
 // direct testing against the jobs-search API this app otherwise uses: searching "intern"
@@ -9,38 +10,7 @@ import { budgetFor, SAFETY_MARGIN_MS, type Deadline } from "./deadline";
 // from cold-pitching actual local businesses, not from a job board, so for the high-school
 // stage we search OpenStreetMap for real nearby businesses instead, and let the student pitch
 // themselves. These are never confirmed openings; every result here is a suggested target,
-// not a listing.
-//
-// Each filter matches specific tag VALUES via regex, never a bare tag-presence filter like
-// ["shop"], tested directly against Overpass's public instance: a bare presence filter (which
-// has to scan every subtype of that tag) reliably timed out once combined with even one more
-// filter, while a handful of regex-narrowed value filters stayed fast. This also keeps the
-// categories realistic for what a teen could plausibly walk into and ask about.
-// "office=it" is OSM's tag for a software/IT company, the closest real proxy this data has
-// for "tech company." Design, marketing, eng, and data are the roles a student most plausibly
-// wants at a tech company specifically (vs. trades/healthcare/hospitality/retail, which are
-// genuinely local-business roles), so each of those includes it, on top of the role's own
-// more specific category, rather than only generic non-tech offices like real estate or
-// insurance agencies, which read as an obviously wrong match for "I want a design internship."
-const ROLE_OSM_FILTERS: Record<RoleKey, string[]> = {
-  marketing: ['["office"~"^(it|advertising_agency|marketing|newspaper|publisher)$"]'],
-  ops: ['["office"~"^(it|company|consulting|financial|coworking)$"]'],
-  eng: ['["office"~"^(it|engineer|telecommunication)$"]', '["shop"="computer"]'],
-  design: ['["office"~"^(it|architect)$"]', '["craft"~"^(photographer|sign_maker)$"]'],
-  data: ['["office"~"^(it|research)$"]'],
-  trades: ['["craft"~"^(electrician|plumber|carpenter|hvac|painter|roofer|metal_construction)$"]'],
-  healthcare: ['["amenity"~"^(clinic|dentist|veterinary|pharmacy)$"]'],
-  hospitality: ['["amenity"~"^(restaurant|cafe|fast_food|bar|ice_cream)$"]', '["tourism"="hotel"]'],
-  retail: [
-    '["shop"~"^(bakery|clothes|shoes|convenience|supermarket|pet|toys|books|florist|hairdresser|beauty|bicycle|garden_centre|coffee|deli|gift|jewelry|electronics)$"]',
-  ],
-};
-
-const DEFAULT_FILTERS = [
-  '["shop"~"^(bakery|clothes|convenience|supermarket|pet|toys|books|florist|hairdresser|coffee|deli|gift)$"]',
-  '["amenity"~"^(restaurant|cafe|fast_food)$"]',
-  '["office"~"^(estate_agent|insurance|company|consulting)$"]',
-];
+// not a listing. The query itself lives in overpass.ts, shared with the browser.
 
 const ROLE_LABELS: Record<RoleKey, string> = {
   marketing: "marketing",
@@ -54,63 +24,24 @@ const ROLE_LABELS: Record<RoleKey, string> = {
   retail: "retail",
 };
 
-// Overpass query cost rises fast with radius in a dense city, capped well below what the
-// "how far" question allows so the search stays reliably fast, and so results stay genuinely
-// nearby enough for a teen to visit or call, which matters more here than for a
-// remote-friendly internship search.
-export const MAX_RADIUS_MILES = 50;
-// Each query gets a workable timeout of its own rather than a share of one shared budget.
-// Deriving it from a remainder starved the first query: with a 13s budget the opening 10mi
-// query told Overpass [timeout:11], which a dense city cannot answer in, and Austin went from
-// 60 results to zero.
-//
-// These are generous because the public instance genuinely is slow for this query: measured
-// from Campbell, California, it took 14.8s to 28.8s for the same request. Cutting them back
-// does not make the search faster, it only makes it come back empty.
-//
-// The same 30s at every radius, because the cost of this query does not depend on radius (see
-// fetchLocalBusinesses). Searches of 15 miles or less used to get 22s, below the 28.8s already
-// measured. On 2026-10-15 the main instance took 27.9s for an Austin, 15-mile healthcare
-// search, so every one of them timed out, retried, timed out again, and said "Search failed".
-const tierTimeoutMs: (radiusMiles: number) => number = () => 30_000;
+// The server's own Overpass attempt (used only when the browser's failed) gets the whole budget
+// left; the request's Deadline cuts it to what fits under the host's response limit.
+const tierTimeoutMs = 30_000;
 // Overpass reports a freed slot in roughly five seconds, so a retry waits for one rather than
 // immediately spending the client's second attempt on the same refusal.
 const RETRY_WAIT_MS = 5_000;
 // The retry is only worth its wait if the query it buys has a real chance. This query costs
-// about 17s at any radius (see below), so a retry left with less than this is the starved
-// first tier all over again: a five-second wait spent on a query that cannot finish. When the
-// request's time budget cannot cover the wait plus this, the retry is skipped.
+// about 17s at any radius, so a retry left with less than this is not attempted.
 const MIN_RETRY_QUERY_MS = 15_000;
-// Overpass's public instance allows very few concurrent queries per client, so the cheapest
-// way to be a good citizen of it is to ask less often. Students in the same town search the
-// same box, and this is also what stops the automatic re-run for a returning account from
-// costing a fresh query every time they open the site.
+// Time kept back from Overpass for the Nominatim fallback (overpass.ts): enough for about five
+// category queries at its one-per-second limit.
+const NOMINATIM_RESERVE_MS = 7_000;
+// Students in the same town search the same box, and this is also what stops the automatic
+// re-run for a returning account from costing a fresh query every time they open the site.
 const BUSINESS_CACHE_TTL_MS = 60 * 60 * 1000;
 const businessCache = new Map<string, { at: number; elements: OverpassElement[] }>();
 
-export function radiusMilesForAnswers(max?: string): number {
-  return Math.min(parseFloat(max || "10") || 10, MAX_RADIUS_MILES);
-}
-
-interface OverpassTags {
-  name?: string;
-  [key: string]: string | undefined;
-}
-
-interface OverpassElement {
-  type: "node" | "way" | "relation";
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  timestamp?: string;
-  tags?: OverpassTags;
-}
-
-interface OverpassResponse {
-  elements: OverpassElement[];
-  remark?: string;
-}
+export { radiusMilesForAnswers, MAX_RADIUS_MILES } from "./overpass";
 
 // Raw OSM tag values ("it", "marketing", "advertising_agency") aren't sentence-ready nouns
 // used bare, a description reads as "is a it" or "is a marketing". This maps each value this
@@ -201,6 +132,14 @@ function categoryNounPhrase(tags: OverpassTags): string {
   return `${article} ${phrase}`;
 }
 
+// OSM's website tag is sometimes typed without a scheme ("www.example.com"), which a link would
+// treat as a path on this site.
+function withScheme(url: string | undefined): string | null {
+  const u = url?.trim();
+  if (!u) return null;
+  return /^https?:\/\//i.test(u) ? u : `https://${u}`;
+}
+
 function formatAddress(tags: OverpassTags, fallbackCity: string): string {
   const street = [tags["addr:housenumber"], tags["addr:street"]].filter(Boolean).join(" ");
   const city = tags["addr:city"] || fallbackCity;
@@ -208,105 +147,27 @@ function formatAddress(tags: OverpassTags, fallbackCity: string): string {
   return [street, city, state].filter(Boolean).join(", ") || fallbackCity;
 }
 
-// A bbox filter lets Overpass use its spatial index directly, tested directly against the
-// public instance, this consistently ran several times faster than the equivalent "around"
-// (radial) filter, which has to evaluate a precise distance check against every candidate
-// before Overpass can narrow the search. The bbox is a rectangle, not a circle, so the exact
-// radius is re-applied client-side afterward (see below) before anything is shown.
-function buildQuery(lat: number, lng: number, radiusMiles: number, filters: string[], budgetMs: number): string {
-  // Overpass's own timeout is told the time we actually have left, never more, so the server
-  // gives up before our fetch does rather than us abandoning work it is still doing.
-  const budget = Math.max(10, Math.floor(budgetMs / 1000) - 2);
-  const dLat = radiusMiles / 69;
-  const dLng = radiusMiles / (69 * Math.cos((lat * Math.PI) / 180));
-  const south = lat - dLat;
-  const north = lat + dLat;
-  const west = lng - dLng;
-  const east = lng + dLng;
-  const clauses = filters.map((f) => `  node${f}["name"];\n  way${f}["name"];`).join("\n");
-  // No "meta". It was added to carry each record's last-edited date, on the belief that it
-  // cost nothing measurable. Re-measured from Campbell, California, that was wrong: the same
-  // query ran 14.8s, 19.7s and 28.8s with meta against a steady 17.0s, 16.6s and 17.1s
-  // without it. The variance is what mattered, because a run past the timeout returns nothing
-  // at all. Knowing a business record is old is worth less than the search finishing.
-  return `[out:json][timeout:${budget}][bbox:${south},${west},${north},${east}];\n(\n${clauses}\n);\nout center 200;`;
-}
-
-// Which Overpass server to ask. One at a time, in order: a mirror first, then the main instance.
-//
-// overpass-api.de is the main public instance and the one every timing in this file was
-// measured against. It is also overloaded at times. On 2026-10-15 it took 33s for a trivial
-// query and 27.9s for this app's own Austin query, and production answered "Search failed".
-// overpass.private.coffee (formerly overpass.kumi.systems) answered the trivial query in 0.86s
-// that afternoon, then returned HTTP 500 to every query a few minutes later. Neither server can
-// be relied on alone. So the mirror gets a short timeout, and the main instance follows with
-// its full measured one.
-//
-// private.coffee's policy allows this use. The OSM wiki's "Overpass API" page lists it as:
-// "Feel free to use our service in any project, there is no rate limit in place." It asks for
-// a meaningful User-Agent, POST requests, and notice before large-scale use. This app sends at
-// most one query per high-school search, and caches results for an hour.
-//
-// The servers are tried in turn, never raced. Racing would double every search's load on
-// volunteer servers, only to save time while the mirror is down. The comments in
-// fetchLocalBusinesses record what two concurrent queries did to the main instance.
-const OVERPASS_MIRROR = "https://overpass.private.coffee/api/interpreter";
-const OVERPASS_MAIN = "https://overpass-api.de/api/interpreter";
-// A healthy mirror answers within a few seconds, and a broken one has failed in under a second
-// (HTTP 500). Ten seconds only costs anything when the mirror hangs.
+// After a mirror failure, the server goes straight to the main instance for a while, so later
+// searches on the same server instance don't wait on a mirror that just failed.
 const MIRROR_TIMEOUT_MS = 10_000;
-// After a mirror failure, queries go straight to the main instance for a while. That way the
-// retry, and other searches on the same server instance, don't wait on a mirror that just
-// failed. The main instance is never skipped, because it is the last resort.
 const MIRROR_COOLDOWN_MS = 2 * 60 * 1000;
 let mirrorDownUntil = 0;
+const SERVER_HEADERS = { Accept: "*/*", "User-Agent": "internship-nest/1.0 (student cold-outreach finder)" };
 
-async function postOverpass(endpoint: string, params: URLSearchParams, timeoutMs: number): Promise<OverpassElement[]> {
-  const res = await fetch(endpoint, {
-    method: "POST",
-    body: params,
-    // Overpass's Apache front-end 406s requests with no Accept/User-Agent header at all.
-    headers: { Accept: "*/*", "User-Agent": "internship-nest/1.0 (student cold-outreach finder)" },
-    signal: AbortSignal.timeout(timeoutMs),
-  });
-  // Deliberately thrown rather than returning []. Overpass answers 429 when its public
-  // instance is out of slots and 504 when a query outruns the server's own timeout, and
-  // swallowing those made a busy service indistinguishable from an empty neighbourhood:
-  // the page told students "0 real businesses within 30 miles" when the truth was that
-  // nobody had looked yet. The caller decides what to do with a failure.
-  if (!res.ok) throw new Error(`Overpass ${res.status} from ${new URL(endpoint).host}`);
-  const body = (await res.json()) as OverpassResponse;
-  // A query that runs out of time on the server can still come back as HTTP 200, with the
-  // error in "remark" and the elements empty or cut short. Showing that would be the same false
-  // "nothing near you" as above, so it counts as a failure too.
-  if (body.remark && /error/i.test(body.remark)) throw new Error(`Overpass: ${body.remark}`);
-  return body.elements ?? [];
-}
-
-// Asks the mirror, then the main instance. `budgetMs` is the main instance's own timeout.
-// `cap` lets a caller with an overall time limit shorten either call, and it may throw to
-// mean no time is left. The query is rebuilt for each server, so the timeout written into it
-// matches that server's fetch timeout and the server gives up no later than we do.
-async function queryOverpass(
-  params: URLSearchParams,
-  budgetMs: number,
-  build: (timeoutMs: number) => string,
-  cap: (ms: number) => number = (ms) => ms,
-): Promise<OverpassElement[]> {
+// Asks the mirror, then the main instance. `cap` lets a caller with an overall time limit
+// shorten either call, and it may throw to mean no time is left. The query is rebuilt for each
+// server, so the timeout written into it matches that server's fetch timeout.
+async function queryOverpass(budgetMs: number, build: (timeoutMs: number) => string, cap: (ms: number) => number = (ms) => ms): Promise<OverpassElement[]> {
   if (Date.now() >= mirrorDownUntil) {
     const mirrorMs = cap(Math.min(MIRROR_TIMEOUT_MS, budgetMs));
     try {
-      params.set("data", build(mirrorMs));
-      return await postOverpass(OVERPASS_MIRROR, params, mirrorMs);
+      return await postOverpass(OVERPASS_MIRROR, build(mirrorMs), mirrorMs, SERVER_HEADERS);
     } catch {
-      // 429, 5xx, 406, a timeout, a network error, a non-JSON error page or a server-side
-      // timeout all mean the same thing here: ask the main instance instead.
       mirrorDownUntil = Date.now() + MIRROR_COOLDOWN_MS;
     }
   }
   const mainMs = cap(budgetMs);
-  params.set("data", build(mainMs));
-  return postOverpass(OVERPASS_MAIN, params, mainMs);
+  return postOverpass(OVERPASS_MAIN, build(mainMs), mainMs, SERVER_HEADERS);
 }
 
 export async function fetchLocalBusinesses(opts: {
@@ -318,9 +179,11 @@ export async function fetchLocalBusinesses(opts: {
   roleOther?: string;
   // The search request's shared time budget. Without one, every query gets its full timeout.
   deadline?: Deadline;
+  // Records the student's browser already fetched from Overpass (see overpass.ts). When
+  // present, the server does not query Overpass at all. Already sanitized by the route.
+  elements?: OverpassElement[];
 }): Promise<RawListing[]> {
-  const filters = opts.roles.length ? opts.roles.flatMap((r) => ROLE_OSM_FILTERS[r] ?? []) : DEFAULT_FILTERS;
-  const uniqueFilters = Array.from(new Set(filters.length ? filters : DEFAULT_FILTERS));
+  const uniqueFilters = filtersForRoles(opts.roles);
   // "Something else" has no OSM tag of its own, the search still falls back to the
   // fixed-category filters above, but the free text is worked into the label so the
   // generated description honestly reflects what the student actually typed.
@@ -333,12 +196,16 @@ export async function fetchLocalBusinesses(opts: {
     // and a mirror attempt of at most 10s. With a 50s budget, the main instance still gets
     // its full tier timeout, up to the longest at 30s (50 - 8 - 10 - 2s margin = 30s). Only a
     // late retry can come out shorter, which is the point of the budget.
-    const params = new URLSearchParams();
     return queryOverpass(
-      params,
-      tierTimeoutMs(radiusMiles),
+      tierTimeoutMs,
       (ms) => buildQuery(opts.lat, opts.lng, radiusMiles, uniqueFilters, ms),
-      (ms) => budgetFor(ms, opts.deadline),
+      (ms) => {
+        const capped = budgetFor(ms, opts.deadline);
+        if (!opts.deadline) return capped;
+        const beforeReserve = opts.deadline.remaining() - SAFETY_MARGIN_MS - NOMINATIM_RESERVE_MS;
+        if (beforeReserve < MIN_CALL_MS) throw new BudgetSpentError();
+        return Math.min(capped, beforeReserve);
+      },
     );
   }
 
@@ -365,12 +232,16 @@ export async function fetchLocalBusinesses(opts: {
   // retry only pushes the function past the host's limit, which ends in an error page rather
   // than the "search failed" message the results screen knows how to show.
   const canAffordRetry = () =>
-    !opts.deadline || opts.deadline.remaining() - SAFETY_MARGIN_MS - RETRY_WAIT_MS >= MIN_RETRY_QUERY_MS;
+    !opts.deadline || opts.deadline.remaining() - SAFETY_MARGIN_MS - NOMINATIM_RESERVE_MS - RETRY_WAIT_MS >= MIN_RETRY_QUERY_MS;
   const cacheKey = `${opts.lat.toFixed(2)},${opts.lng.toFixed(2)},${opts.radiusMiles},${uniqueFilters.join("|")}`;
   const cached = businessCache.get(cacheKey);
 
   let elements: OverpassElement[];
-  if (cached && Date.now() - cached.at < BUSINESS_CACHE_TTL_MS) {
+  let fromFallback = false;
+  if (opts.elements && opts.elements.length) {
+    // Fetched by the student's own browser. Not cached: it only ever shapes their own results.
+    elements = opts.elements;
+  } else if (cached && Date.now() - cached.at < BUSINESS_CACHE_TTL_MS) {
     elements = cached.elements;
   } else {
     try {
@@ -386,15 +257,24 @@ export async function fetchLocalBusinesses(opts: {
         if (cached) {
           elements = cached.elements;
         } else {
-          // Nothing is known about this area, so nothing is claimed about it. Reported as a
-          // failure rather than an empty result, because telling a student there are no
-          // businesses near them is a claim this search has not earned, and it sends them off
-          // to widen a radius that was never the problem.
-          throw new Error("Business search unavailable");
+          try {
+            elements = await searchNominatim(opts.lat, opts.lng, opts.radiusMiles, uniqueFilters, {
+              headers: SERVER_HEADERS,
+              cap: (ms) => budgetFor(ms, opts.deadline),
+            });
+            // A partial list: not cached, so the next search here still gets Overpass's full one.
+            fromFallback = true;
+          } catch {
+            // Nothing is known about this area, so nothing is claimed about it. Reported as a
+            // failure rather than an empty result, because telling a student there are no
+            // businesses near them is a claim this search has not earned, and it sends them off
+            // to widen a radius that was never the problem.
+            throw new Error("Business search unavailable");
+          }
         }
       }
     }
-    businessCache.set(cacheKey, { at: Date.now(), elements });
+    if (!fromFallback) businessCache.set(cacheKey, { at: Date.now(), elements });
   }
 
   const byKey = new Map<string, OverpassElement>();
@@ -423,7 +303,7 @@ export async function fetchLocalBusinesses(opts: {
       locationLabel: formatAddress(tags, opts.cityLabel),
       lat,
       lng: lon,
-      description: `${tags.name} is ${categoryNounPhrase(tags)} near ${opts.cityLabel}. There's no internship posting here. This is a suggested cold-outreach target based on your interest in ${roleLabel} work nearby.`,
+      description: `OpenStreetMap lists ${tags.name} as ${categoryNounPhrase(tags)} near ${opts.cityLabel}. There's no internship posting here. This is a suggested cold-outreach target based on your interest in ${roleLabel} work nearby.`,
       category,
       url: "",
       salaryMin: null,
@@ -434,10 +314,11 @@ export async function fetchLocalBusinesses(opts: {
       unpaidMentioned: false,
       contactEmail: tags.email || tags["contact:email"] || null,
       coldOutreach: true,
-      websiteUrl: tags.website || tags["contact:website"] || null,
+      websiteUrl: withScheme(tags.website || tags["contact:website"]),
       phone: tags.phone || tags["contact:phone"] || null,
       matchTag: tag?.value ?? null,
       sourceUpdated: el.timestamp ?? null,
+      addressIsStreet: Boolean(tags["addr:street"]),
       source: "OpenStreetMap",
     });
   }

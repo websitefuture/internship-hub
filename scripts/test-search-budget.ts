@@ -1,14 +1,14 @@
 // Checks that POST /api/search-live always answers with its own JSON, inside its time budget,
 // and keeps bytes flowing while it works, however slow or broken the outside services are.
 //
-// Two host limits matter (see src/lib/deadline.ts): Netlify kills a function at 60s, and its
-// edge drops a response that is silent for ~30s. The route has a 50s budget and streams a
+// Netlify cuts a function's response at about 30s (measured 2026-10-20; see src/lib/deadline.ts), and its
+// edge drops a response that is silent for ~30s. The route has a 25s budget and streams a
 // space every KEEPALIVE_MS until the JSON is ready.
 //
 // Every outside service is replaced by a stub on globalThis.fetch, so nothing real is called.
 // Stubs honour the abort signal the way real fetch does. The clock is real. Each scenario runs
 // in its own child process, so module state (caches, the Overpass mirror cooldown) can't leak
-// between them, and they run in parallel: about 50s in total.
+// between them, and they run in parallel: about 25s in total.
 //
 //   npm run test:search-budget
 
@@ -63,9 +63,25 @@ function businesses(lat: number, lng: number) {
       id: 1000 + i,
       lat: lat + i * 0.002,
       lon: lng + i * 0.002,
-      tags: { name: `Test Clinic ${i}`, amenity: "clinic" },
+      tags: { name: `Test Clinic ${i}`, amenity: "clinic", phone: `+1 555 010${i}` },
     })),
   };
+}
+
+// The same kind of places as Nominatim's category search returns them (the Overpass fallback).
+const isNominatimCategory = (url: string) => url.includes("nominatim") && url.includes("q=%5B");
+function nominatimPlaces(lat: number, lng: number) {
+  return Array.from({ length: 4 }, (_, i) => ({
+    osm_type: "node",
+    osm_id: 2000 + i,
+    lat: String(lat + i * 0.002),
+    lon: String(lng + i * 0.002),
+    category: "amenity",
+    type: "clinic",
+    name: `Fallback Clinic ${i}`,
+    address: { house_number: String(100 + i), road: "Main Street", city: "San Antonio" },
+    extratags: null,
+  }));
 }
 
 function osrmOk(url: string) {
@@ -93,6 +109,8 @@ interface Scenario {
   answers: Record<string, unknown>;
   handler: () => Handler;
   expect: (body: Body, calls: Record<string, number>) => string | null;
+  // Business records the browser already fetched from Overpass (high school only).
+  osm?: unknown;
 }
 
 const HS = { stage: "hs", max: "15", role: ["healthcare"], how: "drive", mode: "onsite" };
@@ -161,8 +179,25 @@ const scenarios: Scenario[] = [
         return hang(init); // OSRM never answers
       };
     },
-    // The retry skipped the mirror that had just failed: one mirror call, two main calls.
-    expect: (b, c) => hasResults(b) ?? callCount(c, 1, 2),
+    // Server-only fallback (the browser's own query failed too). A 7.5s geocode, a 5s wait and
+    // a 13s retry do not fit under Netlify's ~30s cut, so the route must give up cleanly, with
+    // its own "Search failed", rather than be cut off mid-stream. In production the browser's
+    // query (lib/overpass.ts) is what finds these results.
+    expect: (b) => searchFailed(b),
+  },
+  {
+    name: "Browser sent the records: server never calls Overpass",
+    oldSec: "n/a (new)",
+    lat: 37.29,
+    lng: -121.95,
+    answers: HS,
+    osm: businesses(37.29, -121.95).elements,
+    handler: () => (url, init) => {
+      if (url.includes("nominatim")) return after(300, init, () => json(place("Campbell", "California")));
+      if (url.includes("router.project-osrm.org")) return Promise.resolve(osrmOk(url));
+      return hang(init); // Overpass would hang; it must not be asked at all
+    },
+    expect: (b, c) => hasResults(b) ?? callCount(c, 0, 0),
   },
   {
     name: "All Overpass servers hang",
@@ -174,23 +209,27 @@ const scenarios: Scenario[] = [
       if (url.includes("nominatim")) return after(7_500, init, () => json(place("Dallas", "Texas")));
       return hang(init);
     },
-    // Mirror 10s, then main with its full 30s, then no time for a retry: 7.5 + 10 + 30 = 47.5s.
-    expect: (b, c) => searchFailed(b) ?? callCount(c, 1, 1),
+    // A 7.5s geocode and the mirror's 10s leave too little for the main instance once the time
+    // kept for Nominatim is set aside, so it is skipped; Nominatim (hanging here too) gets that
+    // time, and the route still answers with its own "Search failed" inside the budget.
+    expect: (b, c) => searchFailed(b) ?? callCount(c, 1, 0),
   },
   {
-    name: "All Overpass servers fail fast (500 / 503)",
+    name: "All Overpass servers fail fast (500 / 503): Nominatim fallback",
     oldSec: "5.3s",
     lat: 29.42,
     lng: -98.49,
     answers: HS,
     handler: () => (url, init) => {
+      if (isNominatimCategory(url)) return after(300, init, () => json(nominatimPlaces(29.42, -98.49)));
       if (url.includes("nominatim")) return after(300, init, () => json(place("San Antonio", "Texas")));
       if (url.includes(MIRROR)) return Promise.resolve(errorPage(500));
       if (url.includes(MAIN)) return Promise.resolve(errorPage(503));
       return hang(init);
     },
-    // Still one query and one retry against the main instance, never a burst.
-    expect: (b, c) => searchFailed(b) ?? callCount(c, 1, 2),
+    // One query each, never a burst: the retry would eat the time kept for Nominatim, which
+    // then finds the businesses.
+    expect: (b, c) => hasResults(b) ?? callCount(c, 1, 1),
   },
   {
     name: "College: slow Workday pages, other boards and drive times hang",
@@ -200,7 +239,7 @@ const scenarios: Scenario[] = [
     answers: { stage: "ug", max: "30", role: ["eng"], how: "drive", mode: "onsite" },
     handler: () => (url, init) => {
       if (url.includes("nominatim")) return after(7_500, init, () => json(place("Houston", "Texas")));
-      if (url.includes("myworkdayjobs.com") && url.endsWith("/jobs")) return after(11_500, init, workdayPage);
+      if (url.includes("myworkdayjobs.com") && url.endsWith("/jobs")) return after(6_000, init, workdayPage);
       return hang(init); // Adzuna, The Muse, Greenhouse, Lever, Ashby, OSRM
     },
     expect: hasResults,
@@ -224,7 +263,7 @@ async function runOne(s: Scenario): Promise<Outcome> {
     new Request("http://localhost/api/search-live", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ answers: s.answers, loc: { lat: s.lat, lng: s.lng, label: "test" } }),
+      body: JSON.stringify({ answers: s.answers, loc: { lat: s.lat, lng: s.lng, label: "test" }, osm: s.osm }),
     }),
   );
 

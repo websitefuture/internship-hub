@@ -12,6 +12,10 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Netlify's build output, and a vendored third-party script, neither written here.
+    ".netlify/**",
+    "public/scrollcraft.js",
+    ".claude/**",
   ]),
 ]);
 

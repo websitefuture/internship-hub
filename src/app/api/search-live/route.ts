@@ -4,7 +4,9 @@ import { ADZUNA_COUNTRIES } from "@/lib/jobs";
 import { searchAllSources } from "@/lib/sources";
 import { miles } from "@/lib/geo";
 import { fetchLocalBusinesses, radiusMilesForAnswers } from "@/lib/localBusinesses";
+import { sanitizeElements, type OverpassElement } from "@/lib/overpass";
 import { getDriveTimes } from "@/lib/routing";
+import { deadLinks } from "@/lib/linkCheck";
 import { Deadline, KEEPALIVE_MS, SEARCH_BUDGET_MS } from "@/lib/deadline";
 import { scoreLive } from "@/lib/scoring";
 import type { Answers, DriveTime, LocationAnswer, RawListing, RoleKey } from "@/lib/types";
@@ -13,20 +15,25 @@ const PRELIM_RADIUS_MILES = 300;
 const PRELIM_CAP = 50;
 const HS_BUSINESS_CAP = 60;
 
+const isContactable = (r: RawListing) => Boolean(r.websiteUrl || r.phone || r.contactEmail);
+
 export async function POST(req: Request) {
-  // One clock for the whole request. The host kills the function at 60s, and a killed function
-  // answers with an error page instead of this route's own JSON, which the results screen
-  // words properly. Every network call below takes its timeout from this budget, so the
+  // One clock for the whole request. The host cuts the response off at about 30s (see
+  // lib/deadline.ts), and a cut-off response is not this route's own JSON, which the results
+  // screen words properly. Every network call below takes its timeout from this budget, so the
   // route always answers for itself, with whatever it managed to find, before then.
   const deadline = new Deadline(SEARCH_BUDGET_MS);
   const body = await req.json();
-  const { answers, loc } = body as { answers: Answers; loc: LocationAnswer };
+  const { answers, loc, osm } = body as { answers: Answers; loc: LocationAnswer; osm?: unknown };
 
   if (!loc || typeof loc.lat !== "number" || typeof loc.lng !== "number") {
     return NextResponse.json({ error: "Missing location" }, { status: 400 });
   }
 
-  return streamWithKeepAlive(search(answers, loc, deadline));
+  // High-school searches: the business records the student's browser fetched from Overpass
+  // (see lib/overpass.ts). Untrusted, so sanitized; absent when the browser's query failed.
+  const elements = sanitizeElements(osm);
+  return streamWithKeepAlive(search(answers, loc, deadline, elements));
 }
 
 // Sends the search result as JSON once it is ready, with a single space before it every
@@ -69,7 +76,7 @@ function streamWithKeepAlive(work: Promise<Response>): Response {
   });
 }
 
-async function search(answers: Answers, loc: LocationAnswer, deadline: Deadline): Promise<Response> {
+async function search(answers: Answers, loc: LocationAnswer, deadline: Deadline, elements: OverpassElement[] = []): Promise<Response> {
   // Reverse-geocode server-side so we always search with a real place name
   // "your current location" (the label from the browser geolocation path) would
   // otherwise be sent straight to the jobs API as junk search text.
@@ -95,10 +102,16 @@ async function search(answers: Answers, loc: LocationAnswer, deadline: Deadline)
 
     let raw: RawListing[] = [];
     try {
-      raw = await fetchLocalBusinesses({ lat: loc.lat, lng: loc.lng, radiusMiles, roles, cityLabel, roleOther: answers.roleOther, deadline });
+      raw = await fetchLocalBusinesses({ lat: loc.lat, lng: loc.lng, radiusMiles, roles, cityLabel, roleOther: answers.roleOther, deadline, elements });
     } catch {
       return NextResponse.json({ results: [], coverage: true, coldOutreach: true, error: "Search failed" });
     }
+
+    // A business is only worth pitching if the student can reach it. An OpenStreetMap entry with
+    // no website, phone, email, or street address gives them nothing to act on; in Campbell the
+    // top result was one of these ("Civil Engineering Associates", a name and a pin, nothing that
+    // could be checked or contacted), so they are left out.
+    raw = raw.filter((r) => isContactable(r) || r.addressIsStreet);
 
     if (raw.length === 0) {
       return NextResponse.json({ results: [], coverage: true, coldOutreach: true, hsRadiusMiles: radiusMiles, hsCity: cityLabel });
@@ -110,20 +123,25 @@ async function search(answers: Answers, loc: LocationAnswer, deadline: Deadline)
       .slice(0, HS_BUSINESS_CAP)
       .map((x) => x.r);
 
-    let driveTimes: (DriveTime | null)[] | undefined;
-    try {
-      driveTimes = await getDriveTimes(
+    // Drive times and the website check run side by side, each within the request's budget.
+    const [driveResult, dead] = await Promise.all([
+      getDriveTimes(
         { lat: loc.lat, lng: loc.lng },
         capped.map((l) => ({ lat: l.lat!, lng: l.lng! })),
         deadline,
-      );
-    } catch {
-      // scoreLive falls back to a straight-line estimate per listing
-    }
+      ).catch(() => undefined), // scoreLive falls back to a straight-line estimate per listing
+      deadLinks(capped.flatMap((l) => (l.websiteUrl ? [l.websiteUrl] : [])), deadline),
+    ]);
+    const driveTimes: (DriveTime | null)[] | undefined = driveResult;
+    for (const l of capped) if (l.websiteUrl && dead.has(l.websiteUrl)) l.websiteUrl = null;
 
+    // Businesses with a website, phone, or email come first, in score order; the ones a student
+    // could only visit in person follow. A listed website or phone is also what lets a student
+    // check the business is still there before writing to it.
     const scored = scoreLive(answers, { lat: loc.lat, lng: loc.lng }, capped, driveTimes);
+    const ranked = [...scored.filter(isContactable), ...scored.filter((r) => !isContactable(r))];
     return NextResponse.json({
-      results: scored,
+      results: ranked,
       coverage: true,
       coldOutreach: true,
       hsRadiusMiles: radiusMiles,

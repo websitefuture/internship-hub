@@ -112,6 +112,10 @@ export interface RawListing {
   // cold-outreach business, so a student can see that an entry nobody has touched in years
   // is worth phoning before visiting. Some OSM records here date back to 2009.
   sourceUpdated?: string | null;
+  // Cold-outreach listings only, straight from the OpenStreetMap record, for the drafted email
+  // (which may only state facts the search returned): whether locationLabel is a real street
+  // address rather than the town name used when the record has none.
+  addressIsStreet?: boolean;
   // Which provider this came from, shown on the result so a student can see that the app
   // searches several places and judge each listing by where it originated.
   source?: string;

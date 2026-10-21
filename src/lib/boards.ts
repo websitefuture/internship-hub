@@ -255,16 +255,25 @@ async function listBoard(b: Board, deadline?: Deadline): Promise<Posting[]> {
   const base = `https://${b.tenant}.${b.host}.myworkdayjobs.com/wday/cxs/${b.tenant}/${b.site}`;
   const out: Posting[] = [];
   for (let offset = 0; offset < 60; offset += 20) {
-    const res = await fetch(`${base}/jobs`, {
-      method: "POST",
-      headers: JSON_HEADERS,
-      body: JSON.stringify({ appliedFacets: {}, limit: 20, offset, searchText: "intern" }),
-      // Pages run one after another, so three slow ones could take 36s by themselves. Each is
-      // capped by what the search request has left.
-      signal: AbortSignal.timeout(budgetFor(12000, deadline)),
-    });
-    if (!res.ok) break;
-    const d = (await res.json()) as { jobPostings?: WdJob[] };
+    let d: { jobPostings?: WdJob[] };
+    try {
+      const res = await fetch(`${base}/jobs`, {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ appliedFacets: {}, limit: 20, offset, searchText: "intern" }),
+        // Pages run one after another, so three slow ones could take 36s by themselves. Each is
+        // capped by what the search request has left.
+        signal: AbortSignal.timeout(budgetFor(12000, deadline)),
+      });
+      if (!res.ok) break;
+      d = (await res.json()) as { jobPostings?: WdJob[] };
+    } catch (err) {
+      // A later page running out of time must not throw away the pages already read: that lost
+      // every internship on the board whenever the third page was the slow one. The first page
+      // failing is still a failure, so the caller can serve its cached copy.
+      if (out.length) break;
+      throw err;
+    }
     const page = d.jobPostings ?? [];
     for (const j of page) {
       if (!INTERN.test(j.title ?? "")) continue;
